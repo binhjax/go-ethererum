@@ -382,11 +382,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
 				fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," worker running and w.config.Clique == nil || w.config.Clique.Period > 0 ")
 				// Short circuit if no new transaction arrives.
-				if atomic.LoadInt32(&w.newTxs) == 0 {
-					fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Short circuit if no new transaction arrives ")
-					timer.Reset(recommit)
-					continue
-				}
+				// if atomic.LoadInt32(&w.newTxs) == 0 {
+				// 	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Short circuit if no new transaction arrives ")
+				// 	timer.Reset(recommit)
+				// 	continue
+				// }
 				fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," call commit ")
 				commit(true, commitInterruptResubmit)
 			}
