@@ -19,7 +19,7 @@ package miner
 import (
 	"container/ring"
 	"sync"
-
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -89,6 +89,7 @@ func (set *unconfirmedBlocks) Insert(index uint64, hash common.Hash) {
 // allowance, checking them against the canonical chain for inclusion or staleness
 // report.
 func (set *unconfirmedBlocks) Shift(height uint64) {
+	fmt.Println("binhnt.miner.unconfirmed","unconfirmedBlocks.Shift"," start shift")
 	set.lock.Lock()
 	defer set.lock.Unlock()
 

@@ -17,6 +17,7 @@
 package clique
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -32,6 +33,7 @@ type API struct {
 
 // GetSnapshot retrieves the state snapshot at a given block.
 func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
+	fmt.Println("binhnt.consensus.clique.api","API.GetSnapshot"," start get snapshot")
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
 	if number == nil || *number == rpc.LatestBlockNumber {
@@ -43,11 +45,14 @@ func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
 	if header == nil {
 		return nil, errUnknownBlock
 	}
+
 	return api.clique.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
 }
 
 // GetSnapshotAtHash retrieves the state snapshot at a given block.
 func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {
+	fmt.Println("binhnt.consensus.clique.api","API.GetSnapshotAtHash"," start get snapshot")
+
 	header := api.chain.GetHeaderByHash(hash)
 	if header == nil {
 		return nil, errUnknownBlock
@@ -57,6 +62,8 @@ func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {
 
 // GetSigners retrieves the list of authorized signers at the specified block.
 func (api *API) GetSigners(number *rpc.BlockNumber) ([]common.Address, error) {
+	fmt.Println("binhnt.consensus.clique.api","API.GetSigners"," start get GetSigners")
+
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
 	if number == nil || *number == rpc.LatestBlockNumber {
@@ -77,6 +84,8 @@ func (api *API) GetSigners(number *rpc.BlockNumber) ([]common.Address, error) {
 
 // GetSignersAtHash retrieves the list of authorized signers at the specified block.
 func (api *API) GetSignersAtHash(hash common.Hash) ([]common.Address, error) {
+	fmt.Println("binhnt.consensus.clique.api","API.GetSignersAtHash"," start get GetSignersAtHash")
+
 	header := api.chain.GetHeaderByHash(hash)
 	if header == nil {
 		return nil, errUnknownBlock
@@ -90,6 +99,8 @@ func (api *API) GetSignersAtHash(hash common.Hash) ([]common.Address, error) {
 
 // Proposals returns the current proposals the node tries to uphold and vote on.
 func (api *API) Proposals() map[common.Address]bool {
+	fmt.Println("binhnt.consensus.clique.api","API.Proposals"," start  Proposals")
+
 	api.clique.lock.RLock()
 	defer api.clique.lock.RUnlock()
 
@@ -103,6 +114,8 @@ func (api *API) Proposals() map[common.Address]bool {
 // Propose injects a new authorization proposal that the signer will attempt to
 // push through.
 func (api *API) Propose(address common.Address, auth bool) {
+	fmt.Println("binhnt.consensus.clique.api","API.Propose"," start  Propose")
+
 	api.clique.lock.Lock()
 	defer api.clique.lock.Unlock()
 
@@ -112,6 +125,8 @@ func (api *API) Propose(address common.Address, auth bool) {
 // Discard drops a currently running proposal, stopping the signer from casting
 // further votes (either for or against).
 func (api *API) Discard(address common.Address) {
+	fmt.Println("binhnt.consensus.clique.api","API.Discard"," start  Discard")
+
 	api.clique.lock.Lock()
 	defer api.clique.lock.Unlock()
 

@@ -173,6 +173,8 @@ func sigHash(header *types.Header) (hash common.Hash) {
 
 // ecrecover extracts the Ethereum account address from a signed header.
 func ecrecover(header *types.Header, sigcache *lru.ARCCache) (common.Address, error) {
+	fmt.Println("binhnt.consensus.clique.clique","ecrecover"," start ")
+
 	// If the signature's already cached, return that
 	hash := header.Hash()
 	if address, known := sigcache.Get(hash); known {
@@ -218,6 +220,7 @@ type Clique struct {
 // New creates a Clique proof-of-authority consensus engine with the initial
 // signers set to the ones provided by the user.
 func New(config *params.CliqueConfig, db ethdb.Database) *Clique {
+		fmt.Println("binhnt.consensus.clique.clique","New"," start new New")
 	// Set any missing consensus parameters to their defaults
 	conf := *config
 	if conf.Epoch == 0 {
@@ -239,11 +242,15 @@ func New(config *params.CliqueConfig, db ethdb.Database) *Clique {
 // Author implements consensus.Engine, returning the Ethereum address recovered
 // from the signature in the header's extra-data section.
 func (c *Clique) Author(header *types.Header) (common.Address, error) {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.Author"," start new New")
+
 	return ecrecover(header, c.signatures)
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules.
 func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.VerifyHeader"," start VerifyHeader")
+
 	return c.verifyHeader(chain, header, nil)
 }
 
@@ -251,6 +258,8 @@ func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header,
 // method returns a quit channel to abort the operations and a results channel to
 // retrieve the async verifications (the order is that of the input slice).
 func (c *Clique) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.VerifyHeaders"," start VerifyHeaders")
+
 	abort := make(chan struct{})
 	results := make(chan error, len(headers))
 
@@ -273,6 +282,8 @@ func (c *Clique) VerifyHeaders(chain consensus.ChainReader, headers []*types.Hea
 // looking those up from the database. This is useful for concurrently verifying
 // a batch of new headers.
 func (c *Clique) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.verifyHeader"," start verifyHeader")
+
 	if header.Number == nil {
 		return errUnknownBlock
 	}
@@ -336,6 +347,8 @@ func (c *Clique) verifyHeader(chain consensus.ChainReader, header *types.Header,
 // in a batch of parents (ascending order) to avoid looking those up from the
 // database. This is useful for concurrently verifying a batch of new headers.
 func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.verifyCascadingFields"," start verifyCascadingFields")
+
 	// The genesis block is the always valid dead-end
 	number := header.Number.Uint64()
 	if number == 0 {
@@ -376,6 +389,8 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *type
 
 // snapshot retrieves the authorization snapshot at a given point in time.
 func (c *Clique) snapshot(chain consensus.ChainReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.snapshot"," start snapshot")
+
 	// Search for a snapshot in memory or on disk for checkpoints
 	var (
 		headers []*types.Header
@@ -455,6 +470,8 @@ func (c *Clique) snapshot(chain consensus.ChainReader, number uint64, hash commo
 // VerifyUncles implements consensus.Engine, always returning an error for any
 // uncles as this consensus mechanism doesn't permit uncles.
 func (c *Clique) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.VerifyUncles"," start VerifyUncles")
+
 	if len(block.Uncles()) > 0 {
 		return errors.New("uncles not allowed")
 	}
@@ -464,6 +481,8 @@ func (c *Clique) VerifyUncles(chain consensus.ChainReader, block *types.Block) e
 // VerifySeal implements consensus.Engine, checking whether the signature contained
 // in the header satisfies the consensus protocol requirements.
 func (c *Clique) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.VerifySeal"," start VerifySeal")
+
 	return c.verifySeal(chain, header, nil)
 }
 
@@ -472,6 +491,8 @@ func (c *Clique) VerifySeal(chain consensus.ChainReader, header *types.Header) e
 // headers that aren't yet part of the local blockchain to generate the snapshots
 // from.
 func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.verifySeal"," start verifySeal")
+
 	// Verifying the genesis block is not supported
 	number := header.Number.Uint64()
 	if number == 0 {
@@ -515,6 +536,8 @@ func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, p
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
 func (c *Clique) Prepare(chain consensus.ChainReader, header *types.Header) error {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.Prepare"," start Prepare")
+
 	// If the block isn't a checkpoint, cast a random vote (good enough for now)
 	header.Coinbase = common.Address{}
 	header.Nonce = types.BlockNonce{}
@@ -580,17 +603,22 @@ func (c *Clique) Prepare(chain consensus.ChainReader, header *types.Header) erro
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given, and returns the final block.
 func (c *Clique) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.Finalize"," start Finalize, create new block. In POA, tate remains as is and uncles are dropped")
+
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	// Assemble and return the final block for sealing
+	fmt.Println("binhnt.consensus.clique.clique","Clique.Finalize"," return new block with transactions and receipts")
 	return types.NewBlock(header, txs, nil, receipts), nil
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks
 // with.
 func (c *Clique) Authorize(signer common.Address, signFn SignerFn) {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.Authorize"," start Authorize")
+
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -675,6 +703,8 @@ func (c *Clique) Seal(chain consensus.ChainReader, block *types.Block, results c
 // that a new block should have based on the previous blocks in the chain and the
 // current signer.
 func (c *Clique) CalcDifficulty(chain consensus.ChainReader, time uint64, parent *types.Header) *big.Int {
+	fmt.Println("binhnt.consensus.clique.clique","Clique.CalcDifficulty"," start CalcDifficulty")
+
 	snap, err := c.snapshot(chain, parent.Number.Uint64(), parent.Hash(), nil)
 	if err != nil {
 		return nil

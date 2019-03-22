@@ -49,6 +49,7 @@ type StatetestResult struct {
 }
 
 func stateTestCmd(ctx *cli.Context) error {
+	fmt.Println("binhnt.cmd.evm.staterunner","stateTestCmd","call state test " )
 	if len(ctx.Args().First()) == 0 {
 		return errors.New("path-to-test argument required")
 	}
