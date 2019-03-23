@@ -729,6 +729,7 @@ func (bc *BlockChain) Stop() {
 }
 
 func (bc *BlockChain) procFutureBlocks() {
+	fmt.Println("binhnt.core.blockchain","BlockChain.procFutureBlocks","start")
 	blocks := make([]*types.Block, 0, bc.futureBlocks.Len())
 	for _, hash := range bc.futureBlocks.Keys() {
 		if block, exist := bc.futureBlocks.Peek(hash); exist {
@@ -1059,6 +1060,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 // accepted for future processing, and returns an error if the block is too far
 // ahead and was not added.
 func (bc *BlockChain) addFutureBlock(block *types.Block) error {
+	fmt.Println("binhnt.core.blockchain","BlockChain.addFutureBlock","add block")
 	max := big.NewInt(time.Now().Unix() + maxTimeFutureBlocks)
 	if block.Time().Cmp(max) > 0 {
 		return fmt.Errorf("future block timestamp %v > allowed %v", block.Time(), max)
@@ -1148,147 +1150,147 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 
 	block, err := it.next()
 	switch {
-	// First block is pruned, insert as sidechain and reorg only if TD grows enough
-	case err == consensus.ErrPrunedAncestor:
-		return bc.insertSidechain(it)
+				// First block is pruned, insert as sidechain and reorg only if TD grows enough
+				case err == consensus.ErrPrunedAncestor:
+					return bc.insertSidechain(it)
 
-	// First block is future, shove it (and all children) to the future queue (unknown ancestor)
-	case err == consensus.ErrFutureBlock || (err == consensus.ErrUnknownAncestor && bc.futureBlocks.Contains(it.first().ParentHash())):
-		for block != nil && (it.index == 0 || err == consensus.ErrUnknownAncestor) {
-			if err := bc.addFutureBlock(block); err != nil {
-				return it.index, events, coalescedLogs, err
-			}
-			block, err = it.next()
-		}
-		stats.queued += it.processed()
-		stats.ignored += it.remaining()
+				// First block is future, shove it (and all children) to the future queue (unknown ancestor)
+				case err == consensus.ErrFutureBlock || (err == consensus.ErrUnknownAncestor && bc.futureBlocks.Contains(it.first().ParentHash())):
+					for block != nil && (it.index == 0 || err == consensus.ErrUnknownAncestor) {
+						if err := bc.addFutureBlock(block); err != nil {
+							return it.index, events, coalescedLogs, err
+						}
+						block, err = it.next()
+					}
+					stats.queued += it.processed()
+					stats.ignored += it.remaining()
 
-		// If there are any still remaining, mark as ignored
-		return it.index, events, coalescedLogs, err
+					// If there are any still remaining, mark as ignored
+					return it.index, events, coalescedLogs, err
 
-	// First block (and state) is known
-	//   1. We did a roll-back, and should now do a re-import
-	//   2. The block is stored as a sidechain, and is lying about it's stateroot, and passes a stateroot
-	// 	    from the canonical chain, which has not been verified.
-	case err == ErrKnownBlock:
-		// Skip all known blocks that behind us
-		current := bc.CurrentBlock().NumberU64()
+				// First block (and state) is known
+				//   1. We did a roll-back, and should now do a re-import
+				//   2. The block is stored as a sidechain, and is lying about it's stateroot, and passes a stateroot
+				// 	    from the canonical chain, which has not been verified.
+				case err == ErrKnownBlock:
+					// Skip all known blocks that behind us
+					current := bc.CurrentBlock().NumberU64()
 
-		for block != nil && err == ErrKnownBlock && current >= block.NumberU64() {
-			stats.ignored++
-			block, err = it.next()
-		}
-		// Falls through to the block import
+					for block != nil && err == ErrKnownBlock && current >= block.NumberU64() {
+						stats.ignored++
+						block, err = it.next()
+					}
+					// Falls through to the block import
 
-	// Some other error occurred, abort
-	case err != nil:
-		stats.ignored += len(it.chain)
-		bc.reportBlock(block, nil, err)
-		return it.index, events, coalescedLogs, err
+				// Some other error occurred, abort
+				case err != nil:
+					stats.ignored += len(it.chain)
+					bc.reportBlock(block, nil, err)
+					return it.index, events, coalescedLogs, err
 	}
 
 	// No validation errors for the first block (or chain prefix skipped)
 	for ; block != nil && err == nil; block, err = it.next() {
-		fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","process each blocks")
-		// If the chain is terminating, stop processing blocks
-		if atomic.LoadInt32(&bc.procInterrupt) == 1 {
-			log.Debug("Premature abort during blocks processing")
-			break
-		}
-		// If the header is a banned one, straight out abort
-		if BadHashes[block.Hash()] {
-			bc.reportBlock(block, nil, ErrBlacklistedHash)
-			return it.index, events, coalescedLogs, ErrBlacklistedHash
-		}
-		// Retrieve the parent block and it's state to execute on top
-		start := time.Now()
+				fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","process each blocks")
+				// If the chain is terminating, stop processing blocks
+				if atomic.LoadInt32(&bc.procInterrupt) == 1 {
+					log.Debug("Premature abort during blocks processing")
+					break
+				}
+				// If the header is a banned one, straight out abort
+				if BadHashes[block.Hash()] {
+					bc.reportBlock(block, nil, ErrBlacklistedHash)
+					return it.index, events, coalescedLogs, ErrBlacklistedHash
+				}
+				// Retrieve the parent block and it's state to execute on top
+				start := time.Now()
 
-		parent := it.previous()
-		if parent == nil {
-			fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","get parent block")
-			parent = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
-		}
-		state, err := state.New(parent.Root(), bc.stateCache)
-		if err != nil {
-			return it.index, events, coalescedLogs, err
-		}
-		// Process block using the parent state as reference point.
-		t0 := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
-		t1 := time.Now()
-		if err != nil {
-			bc.reportBlock(block, receipts, err)
-			return it.index, events, coalescedLogs, err
-		}
-		// Validate the state using the default validator
-		fmt.Println("binhnt.core.blockchain","BlockChain.insertChain"," Validate the state using the default validator")
-		if err := bc.Validator().ValidateState(block, parent, state, receipts, usedGas); err != nil {
-			fmt.Println("binhnt.core.blockchain","BlockChain.insertChain"," report block")
-			bc.reportBlock(block, receipts, err)
-			return it.index, events, coalescedLogs, err
-		}
+				parent := it.previous()
+				if parent == nil {
+						fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","get parent block")
+						parent = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
+				}
+				state, err := state.New(parent.Root(), bc.stateCache)
+				if err != nil {
+						return it.index, events, coalescedLogs, err
+				}
+				// Process block using the parent state as reference point.
+				t0 := time.Now()
+				receipts, logs, usedGas, err := bc.processor.Process(block, state, bc.vmConfig)
+				t1 := time.Now()
+				if err != nil {
+						bc.reportBlock(block, receipts, err)
+						return it.index, events, coalescedLogs, err
+				}
+				// Validate the state using the default validator
+				fmt.Println("binhnt.core.blockchain","BlockChain.insertChain"," Validate the state using the default validator")
+				if err := bc.Validator().ValidateState(block, parent, state, receipts, usedGas); err != nil {
+						fmt.Println("binhnt.core.blockchain","BlockChain.insertChain"," report block")
+						bc.reportBlock(block, receipts, err)
+						return it.index, events, coalescedLogs, err
+				}
 
-		t2 := time.Now()
-		proctime := time.Since(start)
+				t2 := time.Now()
+				proctime := time.Since(start)
 
-		fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","Write the block to the chain and get the status.")
-		// Write the block to the chain and get the status.
-		status, err := bc.writeBlockWithState(block, receipts, state)
-		t3 := time.Now()
-		if err != nil {
-			return it.index, events, coalescedLogs, err
-		}
-		blockInsertTimer.UpdateSince(start)
-		blockExecutionTimer.Update(t1.Sub(t0))
-		blockValidationTimer.Update(t2.Sub(t1))
-		blockWriteTimer.Update(t3.Sub(t2))
-		switch status {
-				case CanonStatTy:
-					log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(),
-						"uncles", len(block.Uncles()), "txs", len(block.Transactions()), "gas", block.GasUsed(),
-						"elapsed", common.PrettyDuration(time.Since(start)),
-						"root", block.Root())
+				fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","Write the block to the chain and get the status.")
+				// Write the block to the chain and get the status.
+				status, err := bc.writeBlockWithState(block, receipts, state)
+				t3 := time.Now()
+				if err != nil {
+						return it.index, events, coalescedLogs, err
+				}
+				blockInsertTimer.UpdateSince(start)
+				blockExecutionTimer.Update(t1.Sub(t0))
+				blockValidationTimer.Update(t2.Sub(t1))
+				blockWriteTimer.Update(t3.Sub(t2))
+				switch status {
+						case CanonStatTy:
+									log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(),
+										"uncles", len(block.Uncles()), "txs", len(block.Transactions()), "gas", block.GasUsed(),
+										"elapsed", common.PrettyDuration(time.Since(start)),
+										"root", block.Root())
 
-					coalescedLogs = append(coalescedLogs, logs...)
-					events = append(events, ChainEvent{block, block.Hash(), logs})
-					lastCanon = block
+									coalescedLogs = append(coalescedLogs, logs...)
+									events = append(events, ChainEvent{block, block.Hash(), logs})
+									lastCanon = block
 
-					// Only count canonical blocks for GC processing time
-					bc.gcproc += proctime
+									// Only count canonical blocks for GC processing time
+									bc.gcproc += proctime
 
-					case SideStatTy:
-						log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(),
-							"diff", block.Difficulty(), "elapsed", common.PrettyDuration(time.Since(start)),
-							"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
-							"root", block.Root())
-						events = append(events, ChainSideEvent{block})
-		}
-		blockInsertTimer.UpdateSince(start)
-		stats.processed++
-		stats.usedGas += usedGas
+							case SideStatTy:
+									log.Debug("Inserted forked block", "number", block.Number(), "hash", block.Hash(),
+										"diff", block.Difficulty(), "elapsed", common.PrettyDuration(time.Since(start)),
+										"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
+										"root", block.Root())
+									events = append(events, ChainSideEvent{block})
+				}
+				blockInsertTimer.UpdateSince(start)
+				stats.processed++
+				stats.usedGas += usedGas
 
-		cache, _ := bc.stateCache.TrieDB().Size()
-		stats.report(chain, it.index, cache)
+				cache, _ := bc.stateCache.TrieDB().Size()
+				stats.report(chain, it.index, cache)
 	}
 	// Any blocks remaining here? The only ones we care about are the future ones
 	if block != nil && err == consensus.ErrFutureBlock {
-		if err := bc.addFutureBlock(block); err != nil {
-			return it.index, events, coalescedLogs, err
-		}
-		block, err = it.next()
-
-		for ; block != nil && err == consensus.ErrUnknownAncestor; block, err = it.next() {
 			if err := bc.addFutureBlock(block); err != nil {
-				return it.index, events, coalescedLogs, err
+					return it.index, events, coalescedLogs, err
 			}
-			stats.queued++
-		}
+			block, err = it.next()
+
+			for ; block != nil && err == consensus.ErrUnknownAncestor; block, err = it.next() {
+				if err := bc.addFutureBlock(block); err != nil {
+						return it.index, events, coalescedLogs, err
+				}
+				stats.queued++
+			}
 	}
 	stats.ignored += it.remaining()
 
 	// Append a single chain head event if we've progressed the chain
 	if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
-		events = append(events, ChainHeadEvent{lastCanon})
+			events = append(events, ChainHeadEvent{lastCanon})
 	}
 	return it.index, events, coalescedLogs, err
 }

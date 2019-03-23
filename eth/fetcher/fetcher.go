@@ -636,6 +636,7 @@ func (f *Fetcher) enqueue(peer string, block *types.Block) {
 // block's number is at the same height as the current import phase, it updates
 // the phase states accordingly.
 func (f *Fetcher) insert(peer string, block *types.Block) {
+	fmt.Println("binhnt.eth.fetcher.fetcher","Fetcher.insert","start insert ")
 	hash := block.Hash()
 
 	// Run the import on a new thread

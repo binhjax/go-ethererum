@@ -1468,14 +1468,15 @@ func (d *Downloader) processFullSyncContent() error {
 }
 
 func (d *Downloader) importBlockResults(results []*fetchResult) error {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.importBlockResults","start")
 	// Check for any early termination requests
 	if len(results) == 0 {
-		return nil
+			return nil
 	}
 	select {
-	case <-d.quitCh:
-		return errCancelContentProcessing
-	default:
+			case <-d.quitCh:
+				return errCancelContentProcessing
+			default:
 	}
 	// Retrieve the a batch of results to import
 	first, last := results[0].Header, results[len(results)-1].Header

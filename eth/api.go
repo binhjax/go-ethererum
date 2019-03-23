@@ -228,7 +228,7 @@ func (api *PrivateAdminAPI) ImportChain(file string) (bool, error) {
 	// Make sure the can access the file to import
 	in, err := os.Open(file)
 	if err != nil {
-		return false, err
+			return false, err
 	}
 	defer in.Close()
 

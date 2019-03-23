@@ -548,35 +548,37 @@ func (w *worker) taskLoop() {
 
 	for {
 		select {
-		case task := <-w.taskCh:
-			fmt.Println("binhnt.miner.worker.go","worker.taskLoop"," event taskCh:  Reject duplicate sealing work due to resubmitting ")
+					case task := <-w.taskCh:
+						fmt.Println("binhnt.miner.worker.go","worker.taskLoop"," event taskCh:  Reject duplicate sealing work due to resubmitting ")
 
-			if w.newTaskHook != nil {
-				w.newTaskHook(task)
-			}
-			// Reject duplicate sealing work due to resubmitting.
-			sealHash := w.engine.SealHash(task.block.Header())
-			if sealHash == prev {
-				continue
-			}
-			// Interrupt previous sealing operation
-			interrupt()
-			stopCh, prev = make(chan struct{}), sealHash
+						if w.newTaskHook != nil {
+							w.newTaskHook(task)
+						}
+						// Reject duplicate sealing work due to resubmitting.
+						sealHash := w.engine.SealHash(task.block.Header())
+						if sealHash == prev {
+							continue
+						}
+						// Interrupt previous sealing operation
+						fmt.Println("binhnt.miner.worker.go","worker.taskLoop","  event taskCh:  Interrupt previous sealing operation ")
+						interrupt()
+						stopCh, prev = make(chan struct{}), sealHash
 
-			if w.skipSealHook != nil && w.skipSealHook(task) {
-				continue
-			}
-			w.pendingMu.Lock()
-			w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
-			w.pendingMu.Unlock()
+						if w.skipSealHook != nil && w.skipSealHook(task) {
+							continue
+						}
+						w.pendingMu.Lock()
+						w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
+						w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
-				log.Warn("Block sealing failed", "err", err)
-			}
-		case <-w.exitCh:
-			interrupt()
-			return
-		}
+						fmt.Println("binhnt.miner.worker.go","worker.taskLoop","  event taskCh: call engine to Seal block ")
+						if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+							log.Warn("Block sealing failed", "err", err)
+						}
+					case <-w.exitCh:
+						interrupt()
+						return
+					}
 	}
 }
 
@@ -587,69 +589,70 @@ func (w *worker) resultLoop() {
 
 	for {
 		select {
-		case block := <-w.resultCh:
-			fmt.Println("binhnt.miner.worker.go","worker.resultLoop"," event from resultCh.")
-			// Short circuit when receiving empty result.
-			if block == nil {
-				continue
-			}
-			// Short circuit when receiving duplicate result caused by resubmitting.
-			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
-				continue
-			}
-			var (
-				sealhash = w.engine.SealHash(block.Header())
-				hash     = block.Hash()
-			)
-			w.pendingMu.RLock()
-			task, exist := w.pendingTasks[sealhash]
-			w.pendingMu.RUnlock()
-			if !exist {
-				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
-				continue
-			}
-			// Different block could share same sealhash, deep copy here to prevent write-write conflict.
-			var (
-				receipts = make([]*types.Receipt, len(task.receipts))
-				logs     []*types.Log
-			)
-			for i, receipt := range task.receipts {
-				receipts[i] = new(types.Receipt)
-				*receipts[i] = *receipt
-				// Update the block hash in all logs since it is now available and not when the
-				// receipt/log of individual transactions were created.
-				for _, log := range receipt.Logs {
-					log.BlockHash = hash
-				}
-				logs = append(logs, receipt.Logs...)
-			}
-			// Commit block and state to database.
-			stat, err := w.chain.WriteBlockWithState(block, receipts, task.state)
-			if err != nil {
-				log.Error("Failed writing block to chain", "err", err)
-				continue
-			}
-			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
-				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+				case block := <-w.resultCh:
+					fmt.Println("binhnt.miner.worker.go","worker.resultLoop"," event from resultCh.")
+					// Short circuit when receiving empty result.
+					if block == nil {
+						continue
+					}
+					// Short circuit when receiving duplicate result caused by resubmitting.
+					if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
+						continue
+					}
+					var (
+						sealhash = w.engine.SealHash(block.Header())
+						hash     = block.Hash()
+					)
+					w.pendingMu.RLock()
+					task, exist := w.pendingTasks[sealhash]
+					w.pendingMu.RUnlock()
 
-			// Broadcast the block and announce chain insertion event
-			w.mux.Post(core.NewMinedBlockEvent{Block: block})
+					if !exist {
+						log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
+						continue
+					}
+					// Different block could share same sealhash, deep copy here to prevent write-write conflict.
+					var (
+						receipts = make([]*types.Receipt, len(task.receipts))
+						logs     []*types.Log
+					)
+					for i, receipt := range task.receipts {
+						receipts[i] = new(types.Receipt)
+						*receipts[i] = *receipt
+						// Update the block hash in all logs since it is now available and not when the
+						// receipt/log of individual transactions were created.
+						for _, log := range receipt.Logs {
+								log.BlockHash = hash
+						}
+						logs = append(logs, receipt.Logs...)
+					}
+					// Commit block and state to database.
+					stat, err := w.chain.WriteBlockWithState(block, receipts, task.state)
+					if err != nil {
+						log.Error("Failed writing block to chain", "err", err)
+						continue
+					}
+					log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
+						"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
-			var events []interface{}
-			switch stat {
-			case core.CanonStatTy:
-				events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
-				events = append(events, core.ChainHeadEvent{Block: block})
-			case core.SideStatTy:
-				events = append(events, core.ChainSideEvent{Block: block})
-			}
-			w.chain.PostChainEvents(events, logs)
+					// Broadcast the block and announce chain insertion event
+					w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
-			// Insert the block into the set of pending ones to resultLoop for confirmations
-			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
+					var events []interface{}
+					switch stat {
+					case core.CanonStatTy:
+						events = append(events, core.ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
+						events = append(events, core.ChainHeadEvent{Block: block})
+					case core.SideStatTy:
+						events = append(events, core.ChainSideEvent{Block: block})
+					}
+					w.chain.PostChainEvents(events, logs)
 
-		case <-w.exitCh:
-			return
+					// Insert the block into the set of pending ones to resultLoop for confirmations
+					w.unconfirmed.Insert(block.NumberU64(), block.Hash())
+
+				case <-w.exitCh:
+					return
 		}
 	}
 }
@@ -1020,16 +1023,17 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 				case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
-					w.unconfirmed.Shift(block.NumberU64() - 1)
+						fmt.Println("binhnt.miner.worker.go","worker.commit"," process after send to engine.")
+						w.unconfirmed.Shift(block.NumberU64() - 1)
 
-					feesWei := new(big.Int)
-					for i, tx := range block.Transactions() {
-						feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
-					}
-					feesEth := new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
+						feesWei := new(big.Int)
+						for i, tx := range block.Transactions() {
+							feesWei.Add(feesWei, new(big.Int).Mul(new(big.Int).SetUint64(receipts[i].GasUsed), tx.GasPrice()))
+						}
+						feesEth := new(big.Float).Quo(new(big.Float).SetInt(feesWei), new(big.Float).SetInt(big.NewInt(params.Ether)))
 
-					log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
-						"uncles", len(uncles), "txs", w.current.tcount, "gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
+						log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
+							"uncles", len(uncles), "txs", w.current.tcount, "gas", block.GasUsed(), "fees", feesEth, "elapsed", common.PrettyDuration(time.Since(start)))
 
 				case <-w.exitCh:
 					log.Info("Worker has exited")

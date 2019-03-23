@@ -690,10 +690,10 @@ func (c *Clique) Seal(chain consensus.ChainReader, block *types.Block, results c
 		}
 
 		select {
-		case results <- block.WithSeal(header):
-		default:
-			log.Warn("Sealing result is not read by miner", "sealhash", c.SealHash(header))
-		}
+				case results <- block.WithSeal(header):
+				default:
+					log.Warn("Sealing result is not read by miner", "sealhash", c.SealHash(header))
+				}
 	}()
 
 	return nil

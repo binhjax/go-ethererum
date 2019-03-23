@@ -45,6 +45,7 @@ func NewPrivateAdminAPI(node *Node) *PrivateAdminAPI {
 // AddPeer requests connecting to a remote node, and also maintaining the new
 // connection at all times, even reconnecting if it is lost.
 func (api *PrivateAdminAPI) AddPeer(url string) (bool, error) {
+	fmt.Println("binhnt.node.api","api.AddPeer","parsr url: ", url, " and add peer")
 	// Make sure the server is running, fail otherwise
 	server := api.node.Server()
 	if server == nil {

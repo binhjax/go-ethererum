@@ -63,6 +63,7 @@ func newUnconfirmedBlocks(chain chainRetriever, depth uint) *unconfirmedBlocks {
 
 // Insert adds a new block to the set of unconfirmed ones.
 func (set *unconfirmedBlocks) Insert(index uint64, hash common.Hash) {
+	fmt.Println("binhnt.miner.unconfirmed","unconfirmedBlocks.Insert","Insert new block to unconfirmed")
 	// If a new block was mined locally, shift out any old enough blocks
 	set.Shift(index)
 
