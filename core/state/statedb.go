@@ -90,7 +90,7 @@ type StateDB struct {
 
 // Create a new state from a given trie.
 func New(root common.Hash, db Database) (*StateDB, error) {
-	fmt.Println("binhnt.core.state.statedb","New"," create new statedb with db.OpenTrie")
+	log.Debug("binhnt.core.state.statedb","New"," create new statedb with db.OpenTrie")
 	tr, err := db.OpenTrie(root)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 
 // setError remembers the first non-nil error it is called with.
 func (self *StateDB) setError(err error) {
-	fmt.Println("binhnt.core.state.statedb","StateDB.setError"," set error")
+	log.Debug("binhnt.core.state.statedb","StateDB.setError"," set error")
 
 	if self.dbErr == nil {
 		self.dbErr = err
@@ -116,7 +116,7 @@ func (self *StateDB) setError(err error) {
 }
 
 func (self *StateDB) Error() error {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Error"," get error")
+	log.Debug("binhnt.core.state.statedb","StateDB.Error"," get error")
 
 	return self.dbErr
 }
@@ -124,7 +124,7 @@ func (self *StateDB) Error() error {
 // Reset clears out all ephemeral state objects from the state db, but keeps
 // the underlying state trie to avoid reloading data for the next operations.
 func (self *StateDB) Reset(root common.Hash) error {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Reset"," set hash")
+	log.Debug("binhnt.core.state.statedb","StateDB.Reset"," set hash")
 
 	tr, err := self.db.OpenTrie(root)
 	if err != nil {
@@ -156,13 +156,13 @@ func (self *StateDB) AddLog(log *types.Log) {
 }
 
 func (self *StateDB) GetLogs(hash common.Hash) []*types.Log {
-	fmt.Println("binhnt.core.state.statedb","StateDB.GetLogs"," get logs")
+	log.Debug("binhnt.core.state.statedb","StateDB.GetLogs"," get logs")
 
 	return self.logs[hash]
 }
 
 func (self *StateDB) Logs() []*types.Log {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Logs"," get logs")
+	log.Debug("binhnt.core.state.statedb","StateDB.Logs"," get logs")
 
 	var logs []*types.Log
 	for _, lgs := range self.logs {
@@ -173,7 +173,7 @@ func (self *StateDB) Logs() []*types.Log {
 
 // AddPreimage records a SHA3 preimage seen by the VM.
 func (self *StateDB) AddPreimage(hash common.Hash, preimage []byte) {
-	fmt.Println("binhnt.core.state.statedb","StateDB.AddPreimage"," add AddPreimage")
+	log.Debug("binhnt.core.state.statedb","StateDB.AddPreimage"," add AddPreimage")
 
 	if _, ok := self.preimages[hash]; !ok {
 		self.journal.append(addPreimageChange{hash: hash})
@@ -185,14 +185,14 @@ func (self *StateDB) AddPreimage(hash common.Hash, preimage []byte) {
 
 // Preimages returns a list of SHA3 preimages that have been submitted.
 func (self *StateDB) Preimages() map[common.Hash][]byte {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Preimages"," get Preimages")
+	log.Debug("binhnt.core.state.statedb","StateDB.Preimages"," get Preimages")
 
 	return self.preimages
 }
 
 // AddRefund adds gas to the refund counter
 func (self *StateDB) AddRefund(gas uint64) {
-	fmt.Println("binhnt.core.state.statedb","StateDB.AddRefund"," add refund to journal")
+	log.Debug("binhnt.core.state.statedb","StateDB.AddRefund"," add refund to journal")
 
 	self.journal.append(refundChange{prev: self.refund})
 	self.refund += gas
@@ -201,7 +201,7 @@ func (self *StateDB) AddRefund(gas uint64) {
 // SubRefund removes gas from the refund counter.
 // This method will panic if the refund counter goes below zero
 func (self *StateDB) SubRefund(gas uint64) {
-	fmt.Println("binhnt.core.state.statedb","StateDB.SubRefund"," add refund to journal")
+	log.Debug("binhnt.core.state.statedb","StateDB.SubRefund"," add refund to journal")
 
 	self.journal.append(refundChange{prev: self.refund})
 	if gas > self.refund {
@@ -213,7 +213,7 @@ func (self *StateDB) SubRefund(gas uint64) {
 // Exist reports whether the given account address exists in the state.
 // Notably this also returns true for suicided accounts.
 func (self *StateDB) Exist(addr common.Address) bool {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Exist"," Exist start")
+	log.Debug("binhnt.core.state.statedb","StateDB.Exist"," Exist start")
 
 	return self.getStateObject(addr) != nil
 }
@@ -227,7 +227,7 @@ func (self *StateDB) Empty(addr common.Address) bool {
 
 // Retrieve the balance from the given address or 0 if object not found
 func (self *StateDB) GetBalance(addr common.Address) *big.Int {
-	fmt.Println("binhnt.core.state.statedb","StateDB.GetBalance"," get balance")
+	log.Debug("binhnt.core.state.statedb","StateDB.GetBalance"," get balance")
 
 	stateObject := self.getStateObject(addr)
 	if stateObject != nil {
@@ -517,7 +517,7 @@ func (db *StateDB) ForEachStorage(addr common.Address, cb func(key, value common
 // Copy creates a deep, independent copy of the state.
 // Snapshots of the copied state cannot be applied to the copy.
 func (self *StateDB) Copy() *StateDB {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Copy"," copy statedb to statedb")
+	log.Debug("binhnt.core.state.statedb","StateDB.Copy"," copy statedb to statedb")
 
 	// Copy all the basic fields, initialize the memory ones
 	state := &StateDB{
@@ -567,7 +567,7 @@ func (self *StateDB) Copy() *StateDB {
 
 // Snapshot returns an identifier for the current revision of the state.
 func (self *StateDB) Snapshot() int {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Copy"," create new snapshot")
+	log.Debug("binhnt.core.state.statedb","StateDB.Copy"," create new snapshot")
 
 	id := self.nextRevisionId
 	self.nextRevisionId++
@@ -577,7 +577,7 @@ func (self *StateDB) Snapshot() int {
 
 // RevertToSnapshot reverts all state changes made since the given revision.
 func (self *StateDB) RevertToSnapshot(revid int) {
-	fmt.Println("binhnt.core.state.statedb","StateDB.Copy"," revert all state changed from given revison")
+	log.Debug("binhnt.core.state.statedb","StateDB.Copy"," revert all state changed from given revison")
 
 	// Find the snapshot in the stack of valid snapshots.
 	idx := sort.Search(len(self.validRevisions), func(i int) bool {

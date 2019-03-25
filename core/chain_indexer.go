@@ -142,7 +142,7 @@ func (c *ChainIndexer) AddCheckpoint(section uint64, shead common.Hash) {
 // cascading background processing. Children do not need to be started, they
 // are notified about new events by their parents.
 func (c *ChainIndexer) Start(chain ChainIndexerChain) {
-	fmt.Println("binhnt.core.chain_indexer","ChainIndexer.Start"," start 	channel and subcribe to chain and call event loop ")
+	log.Debug("binhnt.core.chain_indexer","ChainIndexer.Start"," start 	channel and subcribe to chain and call event loop ")
 
 	events := make(chan ChainHeadEvent, 10)
 	sub := chain.SubscribeChainHeadEvent(events)
@@ -193,7 +193,7 @@ func (c *ChainIndexer) Close() error {
 // started for the outermost indexer to push chain head events into a processing
 // queue.
 func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainHeadEvent, sub event.Subscription) {
-	fmt.Println("binhnt.core.chain_indexer","ChainIndexer.eventLoop"," start  event loop ")
+	log.Debug("binhnt.core.chain_indexer","ChainIndexer.eventLoop"," start  event loop ")
 
 	// Mark the chain indexer as active, requiring an additional teardown
 	atomic.StoreUint32(&c.active, 1)
@@ -241,7 +241,7 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainH
 
 // newHead notifies the indexer about new chain heads and/or reorgs.
 func (c *ChainIndexer) newHead(head uint64, reorg bool) {
-	fmt.Println("binhnt.core.chain_indexer","ChainIndexer.newHead"," create new header ")
+	log.Debug("binhnt.core.chain_indexer","ChainIndexer.newHead"," create new header ")
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -386,7 +386,7 @@ func (c *ChainIndexer) updateLoop() {
 // held while processing, the continuity can be broken by a long reorg, in which
 // case the function returns with an error.
 func (c *ChainIndexer) processSection(section uint64, lastHead common.Hash) (common.Hash, error) {
-	fmt.Println("binhnt.core.chain_indexer.go","ChainIndexer.processSection"," start")
+	log.Debug("binhnt.core.chain_indexer.go","ChainIndexer.processSection"," start")
 	c.log.Trace("Processing new chain section", "section", section)
 
 	// Reset and partial processing

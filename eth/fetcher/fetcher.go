@@ -626,7 +626,7 @@ func (f *Fetcher) rescheduleComplete(complete *time.Timer) {
 // enqueue schedules a new future import operation, if the block to be imported
 // has not yet been seen.
 func (f *Fetcher) enqueue(peer string, block *types.Block) {
-	fmt.Print("binhnt.eth.fetcher.fetcher","Fetcher.enqueue"," start enqueue")
+	log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.enqueue"," start enqueue")
 	hash := block.Hash()
 
 	// Ensure the peer isn't DOSing us
