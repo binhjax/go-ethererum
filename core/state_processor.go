@@ -25,7 +25,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"fmt"
+		"github.com/ethereum/go-ethereum/log"
+	// "fmt"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -40,7 +41,7 @@ type StateProcessor struct {
 
 // NewStateProcessor initialises a new StateProcessor.
 func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *StateProcessor {
-	fmt.Println("binhnt.core.state_processor","NewStateProcessor","")
+	log.Debug("binhnt.core.state_processor","NewStateProcessor","")
 	return &StateProcessor{
 		config: config,
 		bc:     bc,
@@ -56,7 +57,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consen
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
 func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
-	fmt.Println("binhnt.core.state_processor","StateProcessor.Process","start process")
+	log.Debug("binhnt.core.state_processor","StateProcessor.Process","start process")
 
 	var (
 		receipts types.Receipts
@@ -67,12 +68,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	)
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
-		fmt.Println("binhnt.core.state_processor","StateProcessor.Process","call misc.ApplyDAOHardFork")
+		log.Debug("binhnt.core.state_processor","StateProcessor.Process","call misc.ApplyDAOHardFork")
 
 		misc.ApplyDAOHardFork(statedb)
 	}
 	// Iterate over and process the individual transactions
-	fmt.Println("binhnt.core.state_processor","StateProcessor.Process"," Iterate over and process the individual transactions ")
+	log.Debug("binhnt.core.state_processor","StateProcessor.Process"," Iterate over and process the individual transactions ")
 
 	for i, tx := range block.Transactions() {
 
@@ -95,29 +96,29 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
 func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, uint64, error) {
-	fmt.Println("binhnt.core.state_processor","ApplyTransaction","  attempts to apply a transaction to the given state database   and uses the input parameters for its environment. It returns the receipt")
+	log.Debug("binhnt.core.state_processor","ApplyTransaction","  attempts to apply a transaction to the given state database   and uses the input parameters for its environment. It returns the receipt")
 
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number))
 	if err != nil {
 		return nil, 0, err
 	}
 	// Create a new context to be used in the EVM environment
-	fmt.Println("binhnt.core.state_processor","ApplyTransaction","  Create a new context to be used in the EVM environment ")
+	log.Debug("binhnt.core.state_processor","ApplyTransaction","  Create a new context to be used in the EVM environment ")
 	context := NewEVMContext(msg, header, bc, author)
 
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	fmt.Println("binhnt.core.state_processor","ApplyTransaction","  Create a new environment which holds all relevant information ")
+	log.Debug("binhnt.core.state_processor","ApplyTransaction","  Create a new environment which holds all relevant information ")
 	vmenv := vm.NewEVM(context, statedb, config, cfg)
 
 	// Apply the transaction to the current state (included in the env)
-	fmt.Println("binhnt.core.state_processor","ApplyTransaction","   Apply the transaction to the current state (included in the env) ")
+	log.Debug("binhnt.core.state_processor","ApplyTransaction","   Apply the transaction to the current state (included in the env) ")
 	_, gas, failed, err := ApplyMessage(vmenv, msg, gp)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	fmt.Println("binhnt.core.state_processor","ApplyTransaction","   Update the state with pending changes")
+	log.Debug("binhnt.core.state_processor","ApplyTransaction","   Update the state with pending changes")
 	// Update the state with pending changes
 	var root []byte
 	if config.IsByzantium(header.Number) {
@@ -129,7 +130,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used by the tx
 	// based on the eip phase, we're passing whether the root touch-delete accounts.
-	fmt.Println("binhnt.core.state_processor","ApplyTransaction","  Create a new receipt for the transaction, storing the intermediate root and gas used by the tx based on the eip phase, we're passing whether the root touch-delete accounts")
+	log.Debug("binhnt.core.state_processor","ApplyTransaction","  Create a new receipt for the transaction, storing the intermediate root and gas used by the tx based on the eip phase, we're passing whether the root touch-delete accounts")
 	receipt := types.NewReceipt(root, failed, *usedGas)
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = gas

@@ -18,7 +18,7 @@ package core
 
 import (
 	"fmt"
-
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -37,7 +37,7 @@ type BlockValidator struct {
 
 // NewBlockValidator returns a new block validator which is safe for re-use
 func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engine consensus.Engine) *BlockValidator {
-	fmt.Println("binhnt.core.block_validator","NewBlockValidator","start create block validator")
+	log.Debug("binhnt.core.block_validator","NewBlockValidator","start create block validator")
 	validator := &BlockValidator{
 		config: config,
 		engine: engine,
@@ -50,7 +50,7 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 // header's transaction and uncle roots. The headers are assumed to be already
 // validated at this point.
 func (v *BlockValidator) ValidateBody(block *types.Block) error {
-	fmt.Println("binhnt.core.block_validator","BlockValidator.ValidateBody","start validate body")
+	log.Debug("binhnt.core.block_validator","BlockValidator.ValidateBody","start validate body")
 
 	// Check whether the block's known, and if not, that it's linkable
 	if v.bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
@@ -81,7 +81,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
 func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
-	fmt.Println("binhnt.core.block_validator","BlockValidator.ValidateState","start validate body")
+	log.Debug("binhnt.core.block_validator","BlockValidator.ValidateState","start validate body")
 
 	header := block.Header()
 	if block.GasUsed() != usedGas {
@@ -111,7 +111,7 @@ func (v *BlockValidator) ValidateState(block, parent *types.Block, statedb *stat
 // ceil if the blocks are full. If the ceil is exceeded, it will always decrease
 // the gas allowance.
 func CalcGasLimit(parent *types.Block, gasFloor, gasCeil uint64) uint64 {
-	fmt.Println("binhnt.core.block_validator","CalcGasLimit","CalcGasLimit start")
+	log.Debug("binhnt.core.block_validator","CalcGasLimit","CalcGasLimit start")
 
 	// contrib = (parentGasUsed * 3 / 2) / 1024
 	contrib := (parent.GasUsed() + parent.GasUsed()/2) / params.GasLimitBoundDivisor

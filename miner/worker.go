@@ -23,7 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"fmt"
+	// "fmt"
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -179,7 +179,7 @@ type worker struct {
 }
 
 func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, recommit time.Duration, gasFloor, gasCeil uint64, isLocalBlock func(*types.Block) bool) *worker {
-	fmt.Println("binhnt.miner.worker.go","newWorker","create a worker")
+	log.Debug("binhnt.miner.worker.go","newWorker","create a worker")
 
 	worker := &worker{
 		config:             config,
@@ -217,16 +217,16 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 		recommit = minRecommitInterval
 	}
 
-	fmt.Println("binhnt.miner.worker.go","newWorker","start mainloop")
+	log.Debug("binhnt.miner.worker.go","newWorker","start mainloop")
 	go worker.mainLoop()
 
-	fmt.Println("binhnt.miner.worker.go","newWorker","start newWorkLoop")
+	log.Debug("binhnt.miner.worker.go","newWorker","start newWorkLoop")
 	go worker.newWorkLoop(recommit)
 
-	fmt.Println("binhnt.miner.worker.go","newWorker","start resultLoop")
+	log.Debug("binhnt.miner.worker.go","newWorker","start resultLoop")
 	go worker.resultLoop()
 
-	fmt.Println("binhnt.miner.worker.go","newWorker","start taskLoop")
+	log.Debug("binhnt.miner.worker.go","newWorker","start taskLoop")
 	go worker.taskLoop()
 
 	// Submit first work to initialize pending state.
@@ -237,7 +237,7 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, eth Backend,
 
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
 func (w *worker) setEtherbase(addr common.Address) {
-	fmt.Println("binhnt.miner.worker.go","worker.setEtherbase","call mu.Lock() and set coinbase = ",addr)
+	log.Debug("binhnt.miner.worker.go","worker.setEtherbase","call mu.Lock() and set coinbase = ",addr)
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.coinbase = addr
@@ -245,7 +245,7 @@ func (w *worker) setEtherbase(addr common.Address) {
 
 // setExtra sets the content used to initialize the block extra field.
 func (w *worker) setExtra(extra []byte) {
-	fmt.Println("binhnt.miner.worker.go","worker.setEtherbase","call mu.Lock() and set coinbase = ",extra)
+	log.Debug("binhnt.miner.worker.go","worker.setEtherbase","call mu.Lock() and set coinbase = ",extra)
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.extra = extra
@@ -277,7 +277,7 @@ func (w *worker) pendingBlock() *types.Block {
 
 // start sets the running status as 1 and triggers new work submitting.
 func (w *worker) start() {
-	fmt.Println("binhnt.miner.worker.go","worker.start","set running")
+	log.Debug("binhnt.miner.worker.go","worker.start","set running")
 	atomic.StoreInt32(&w.running, 1)
 	w.startCh <- struct{}{}
 }
@@ -301,7 +301,7 @@ func (w *worker) close() {
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
 
-	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," submit new mining work upon received events")
+	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," submit new mining work upon received events")
 
 	var (
 		interrupt   *int32
@@ -309,11 +309,11 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		timestamp   int64      // timestamp for each round of mining.
 	)
 
-	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop","start timer with recommit: ",recommit)
+	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop","start timer with recommit: ",recommit)
 	timer := time.NewTimer(0)
 	<-timer.C // discard the initial tick
 
-	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," define commit function")
+	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," define commit function")
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		if interrupt != nil {
@@ -325,7 +325,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
 
-	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," define recalcRecommit function")
+	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," define recalcRecommit function")
 	// recalcRecommit recalculates the resubmitting interval upon feedback.
 	recalcRecommit := func(target float64, inc bool) {
 		var (
@@ -348,7 +348,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		recommit = time.Duration(int64(next))
 	}
 
-	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," define clearPending function")
+	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," define clearPending function")
 	// clearPending cleans the stale pending tasks.
 	clearPending := func(number uint64) {
 		w.pendingMu.Lock()
@@ -360,39 +360,39 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		w.pendingMu.Unlock()
 	}
 
-	fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," start loop and listening event")
+	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," start loop and listening event")
 	for {
 		select {
 		case <-w.startCh:
-			fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Event from startCh -> call commit function")
+			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from startCh -> call commit function")
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
-			fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Event from chainHeadCh -> call commit function")
+			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from chainHeadCh -> call commit function")
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
-			fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Event from timer.C -> call commit function")
+			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from timer.C -> call commit function")
 			// If mining is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
-				fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," worker running and w.config.Clique == nil || w.config.Clique.Period > 0 ")
+				log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," worker running and w.config.Clique == nil || w.config.Clique.Period > 0 ")
 				// Short circuit if no new transaction arrives.
 				if atomic.LoadInt32(&w.newTxs) == 0 {
-					fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Short circuit if no new transaction arrives ")
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Short circuit if no new transaction arrives ")
 					timer.Reset(recommit)
 					continue
 				}
-				fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," call commit ")
+				log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," call commit ")
 				commit(true, commitInterruptResubmit)
 			}
 
 		case interval := <-w.resubmitIntervalCh:
-			fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitIntervalCh -> call commit function")
+			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitIntervalCh -> call commit function")
 			// Adjust resubmit interval explicitly by user.
 			if interval < minRecommitInterval {
 				log.Warn("Sanitizing miner recommit interval", "provided", interval, "updated", minRecommitInterval)
@@ -406,7 +406,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			}
 
 		case adjust := <-w.resubmitAdjustCh:
-			fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitAdjustCh -> call commit function")
+			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitAdjustCh -> call commit function")
 			// Adjust resubmit interval by feedback.
 			if adjust.inc {
 				before := recommit
@@ -423,7 +423,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			}
 
 		case <-w.exitCh:
-			fmt.Println("binhnt.miner.worker.go","worker.newWorkLoop"," Event from exitCh -> return")
+			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from exitCh -> return")
 
 			return
 		}
@@ -432,7 +432,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 // mainLoop is a standalone goroutine to regenerate the sealing task based on the received event.
 func (w *worker) mainLoop() {
-	fmt.Println("binhnt.miner.worker.go","worker.mainLoop"," regenerate the sealing task based on the received event")
+	log.Debug("binhnt.miner.worker.go","worker.mainLoop"," regenerate the sealing task based on the received event")
 
 	defer w.txsSub.Unsubscribe()
 	defer w.chainHeadSub.Unsubscribe()
@@ -441,11 +441,11 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			fmt.Println("binhnt.miner.worker.go","worker.mainLoop"," event from newWorkCh -> commitNewWork")
+			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from newWorkCh -> commitNewWork")
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
-			fmt.Println("binhnt.miner.worker.go","worker.mainLoop"," event from chainSideCh ")
+			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from chainSideCh ")
 			// Short circuit for duplicate side blocks
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
 				continue
@@ -485,7 +485,7 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
-			fmt.Println("binhnt.miner.worker.go","worker.mainLoop"," event from txsCh ")
+			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from txsCh ")
 
 			// Apply transactions to the pending state if we're not mining.
 			//
@@ -515,7 +515,7 @@ func (w *worker) mainLoop() {
 
 		// System stopped
 		case <-w.exitCh:
-			fmt.Println("binhnt.miner.worker.go","worker.mainLoop"," event from exitCh => stop  ")
+			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from exitCh => stop  ")
 			return
 		case <-w.txsSub.Err():
 			return
@@ -530,7 +530,7 @@ func (w *worker) mainLoop() {
 // taskLoop is a standalone goroutine to fetch sealing task from the generator and
 // push them to consensus engine.
 func (w *worker) taskLoop() {
-	fmt.Println("binhnt.miner.worker.go","worker.taskLoop"," fetch sealing task from the generator and push them to consensus engine ")
+	log.Debug("binhnt.miner.worker.go","worker.taskLoop"," fetch sealing task from the generator and push them to consensus engine ")
 
 	var (
 		stopCh chan struct{}
@@ -548,7 +548,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 					case task := <-w.taskCh:
-						fmt.Println("binhnt.miner.worker.go","worker.taskLoop"," event taskCh:  Reject duplicate sealing work due to resubmitting ")
+						log.Debug("binhnt.miner.worker.go","worker.taskLoop"," event taskCh:  Reject duplicate sealing work due to resubmitting ")
 
 						if w.newTaskHook != nil {
 							w.newTaskHook(task)
@@ -559,7 +559,7 @@ func (w *worker) taskLoop() {
 							continue
 						}
 						// Interrupt previous sealing operation
-						fmt.Println("binhnt.miner.worker.go","worker.taskLoop","  event taskCh:  Interrupt previous sealing operation ")
+						log.Debug("binhnt.miner.worker.go","worker.taskLoop","  event taskCh:  Interrupt previous sealing operation ")
 						interrupt()
 						stopCh, prev = make(chan struct{}), sealHash
 
@@ -570,7 +570,7 @@ func (w *worker) taskLoop() {
 						w.pendingTasks[w.engine.SealHash(task.block.Header())] = task
 						w.pendingMu.Unlock()
 
-						fmt.Println("binhnt.miner.worker.go","worker.taskLoop","  event taskCh: call engine to Seal block ")
+						log.Debug("binhnt.miner.worker.go","worker.taskLoop","  event taskCh: call engine to Seal block ")
 						if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
 							log.Warn("Block sealing failed", "err", err)
 						}
@@ -584,12 +584,12 @@ func (w *worker) taskLoop() {
 // resultLoop is a standalone goroutine to handle sealing result submitting
 // and flush relative data to the database.
 func (w *worker) resultLoop() {
-	fmt.Println("binhnt.miner.worker.go","worker.resultLoop"," to handle sealing result submitting and flush relative data to the database.")
+	log.Debug("binhnt.miner.worker.go","worker.resultLoop"," to handle sealing result submitting and flush relative data to the database.")
 
 	for {
 		select {
 				case block := <-w.resultCh:
-					fmt.Println("binhnt.miner.worker.go","worker.resultLoop"," event from resultCh.")
+					log.Debug("binhnt.miner.worker.go","worker.resultLoop"," event from resultCh.")
 					// Short circuit when receiving empty result.
 					if block == nil {
 						continue
@@ -739,12 +739,12 @@ func (w *worker) updateSnapshot() {
 }
 
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
-	fmt.Println("binhnt.miner.worker.go","worker.commitTransaction"," commitTransactioncommitTransaction start.")
+	log.Debug("binhnt.miner.worker.go","worker.commitTransaction"," commitTransactioncommitTransaction start.")
 
-	fmt.Println("binhnt.miner.worker.go","worker.commitTransaction"," call snapshot")
+	log.Debug("binhnt.miner.worker.go","worker.commitTransaction"," call snapshot")
 	snap := w.current.state.Snapshot()
 
-	fmt.Println("binhnt.miner.worker.go","worker.commitTransaction"," call   core.ApplyTransaction")
+	log.Debug("binhnt.miner.worker.go","worker.commitTransaction"," call   core.ApplyTransaction")
 	receipt, _, err := core.ApplyTransaction(w.config, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
@@ -757,7 +757,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 }
 
 func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coinbase common.Address, interrupt *int32) bool {
-	fmt.Println("binhnt.miner.worker.go","worker.commitTransactions"," commitTransactioncommitTransaction start.")
+	log.Debug("binhnt.miner.worker.go","worker.commitTransactions"," commitTransactioncommitTransaction start.")
 
 	// Short circuit if current is nil
 	if w.current == nil {
@@ -873,7 +873,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
-	fmt.Println("binhnt.miner.worker.go","worker.commitNewWork"," commitNewWork start.")
+	log.Debug("binhnt.miner.worker.go","worker.commitNewWork"," commitNewWork start.")
 
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -1003,7 +1003,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	fmt.Println("binhnt.miner.worker.go","worker.commit"," commit start.")
+	log.Debug("binhnt.miner.worker.go","worker.commit"," commit start.")
 
 	// Deep copy receipts here to avoid interaction between different tasks.
 	receipts := make([]*types.Receipt, len(w.current.receipts))
@@ -1022,7 +1022,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 				case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
-						fmt.Println("binhnt.miner.worker.go","worker.commit"," process after send to engine.")
+						log.Debug("binhnt.miner.worker.go","worker.commit"," process after send to engine.")
 						w.unconfirmed.Shift(block.NumberU64() - 1)
 
 						feesWei := new(big.Int)

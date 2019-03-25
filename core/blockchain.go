@@ -729,7 +729,7 @@ func (bc *BlockChain) Stop() {
 }
 
 func (bc *BlockChain) procFutureBlocks() {
-	fmt.Println("binhnt.core.blockchain","BlockChain.procFutureBlocks","start")
+	log.Debug("binhnt.core.blockchain","BlockChain.procFutureBlocks","start")
 	blocks := make([]*types.Block, 0, bc.futureBlocks.Len())
 	for _, hash := range bc.futureBlocks.Keys() {
 		if block, exist := bc.futureBlocks.Peek(hash); exist {
@@ -1060,7 +1060,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 // accepted for future processing, and returns an error if the block is too far
 // ahead and was not added.
 func (bc *BlockChain) addFutureBlock(block *types.Block) error {
-	fmt.Println("binhnt.core.blockchain","BlockChain.addFutureBlock","add block")
+	log.Debug("binhnt.core.blockchain","BlockChain.addFutureBlock","add block")
 	max := big.NewInt(time.Now().Unix() + maxTimeFutureBlocks)
 	if block.Time().Cmp(max) > 0 {
 		return fmt.Errorf("future block timestamp %v > allowed %v", block.Time(), max)
@@ -1076,7 +1076,7 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 //
 // After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
-	fmt.Println("binhnt.core.blockchain","BlockChain.InsertChain","insert blocks")
+	log.Debug("binhnt.core.blockchain","BlockChain.InsertChain","insert blocks")
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
@@ -1095,12 +1095,12 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	// Pre-checks passed, start the full block imports
 	bc.wg.Add(1)
 	bc.chainmu.Lock()
-	fmt.Println("binhnt.core.blockchain","BlockChain.InsertChain","call bc.insertChain")
+	log.Debug("binhnt.core.blockchain","BlockChain.InsertChain","call bc.insertChain")
 	n, events, logs, err := bc.insertChain(chain, true)
 	bc.chainmu.Unlock()
 	bc.wg.Done()
 
-	fmt.Println("binhnt.core.blockchain","BlockChain.InsertChain","call bc.PostChainEvents")
+	log.Debug("binhnt.core.blockchain","BlockChain.InsertChain","call bc.PostChainEvents")
 	bc.PostChainEvents(events, logs)
 	return n, err
 }
@@ -1114,7 +1114,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []interface{}, []*types.Log, error) {
-	fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","insert blocks")
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","insert blocks")
 
 	// If the chain is terminating, don't even bother starting u
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
@@ -1141,7 +1141,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 		seals[i] = verifySeals
 	}
 
-	fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","engine.VerifyHeaders")
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","engine.VerifyHeaders")
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
 
@@ -1191,7 +1191,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 
 	// No validation errors for the first block (or chain prefix skipped)
 	for ; block != nil && err == nil; block, err = it.next() {
-				fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","process each blocks")
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","process each blocks")
 				// If the chain is terminating, stop processing blocks
 				if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 					log.Debug("Premature abort during blocks processing")
@@ -1207,7 +1207,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 
 				parent := it.previous()
 				if parent == nil {
-						fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","get parent block")
+						log.Debug("binhnt.core.blockchain","BlockChain.insertChain","get parent block")
 						parent = bc.GetBlock(block.ParentHash(), block.NumberU64()-1)
 				}
 				state, err := state.New(parent.Root(), bc.stateCache)
@@ -1223,9 +1223,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 						return it.index, events, coalescedLogs, err
 				}
 				// Validate the state using the default validator
-				fmt.Println("binhnt.core.blockchain","BlockChain.insertChain"," Validate the state using the default validator")
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain"," Validate the state using the default validator")
 				if err := bc.Validator().ValidateState(block, parent, state, receipts, usedGas); err != nil {
-						fmt.Println("binhnt.core.blockchain","BlockChain.insertChain"," report block")
+						log.Debug("binhnt.core.blockchain","BlockChain.insertChain"," report block")
 						bc.reportBlock(block, receipts, err)
 						return it.index, events, coalescedLogs, err
 				}
@@ -1233,7 +1233,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 				t2 := time.Now()
 				proctime := time.Since(start)
 
-				fmt.Println("binhnt.core.blockchain","BlockChain.insertChain","Write the block to the chain and get the status.")
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Write the block to the chain and get the status.")
 				// Write the block to the chain and get the status.
 				status, err := bc.writeBlockWithState(block, receipts, state)
 				t3 := time.Now()
@@ -1302,7 +1302,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 // The method writes all (header-and-body-valid) blocks to disk, then tries to
 // switch over to the new chain if the TD exceeded the current chain.
 func (bc *BlockChain) insertSidechain(it *insertIterator) (int, []interface{}, []*types.Log, error) {
-	fmt.Println("binhnt.core.blockchain","BlockChain.insertSidechain","insert sidechain")
+	log.Debug("binhnt.core.blockchain","BlockChain.insertSidechain","insert sidechain")
 	var (
 		externTd *big.Int
 		current  = bc.CurrentBlock()
@@ -1528,24 +1528,24 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 // posts them into the event feed.
 // TODO: Should not expose PostChainEvents. The chain events should be posted in WriteBlock.
 func (bc *BlockChain) PostChainEvents(events []interface{}, logs []*types.Log) {
-	fmt.Println("binhnt.core.blockchain","BlockChain.PostChainEvents"," receive events = ",events," logs = ",logs)
+	log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," receive events = ",events," logs = ",logs)
 	// post event logs for further processing
 	if logs != nil {
-		fmt.Println("binhnt.core.blockchain","BlockChain.PostChainEvents"," send logsFeed ",logs)
+		log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," send logsFeed ",logs)
 		bc.logsFeed.Send(logs)
 	}
 	for _, event := range events {
 		switch ev := event.(type) {
 		case ChainEvent:
-			fmt.Println("binhnt.core.blockchain","BlockChain.PostChainEvents"," send chainFeed ",ev)
+			log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," send chainFeed ",ev)
 			bc.chainFeed.Send(ev)
 
 		case ChainHeadEvent:
-			fmt.Println("binhnt.core.blockchain","BlockChain.PostChainEvents"," send chainHeadFeed ",ev)
+			log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," send chainHeadFeed ",ev)
 			bc.chainHeadFeed.Send(ev)
 
 		case ChainSideEvent:
-			fmt.Println("binhnt.core.blockchain","BlockChain.PostChainEvents"," send ChainSideEvent ",ev)
+			log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," send ChainSideEvent ",ev)
 			bc.chainSideFeed.Send(ev)
 		}
 	}
@@ -1705,25 +1705,25 @@ func (bc *BlockChain) SubscribeRemovedLogsEvent(ch chan<- RemovedLogsEvent) even
 
 // SubscribeChainEvent registers a subscription of ChainEvent.
 func (bc *BlockChain) SubscribeChainEvent(ch chan<- ChainEvent) event.Subscription {
-	fmt.Println("binhnt.core.blockchain","BlockChain.SubscribeChainEvent"," subscribe change events")
+	log.Debug("binhnt.core.blockchain","BlockChain.SubscribeChainEvent"," subscribe change events")
 	return bc.scope.Track(bc.chainFeed.Subscribe(ch))
 }
 
 // SubscribeChainHeadEvent registers a subscription of ChainHeadEvent.
 func (bc *BlockChain) SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription {
-	fmt.Println("binhnt.core.blockchain","BlockChain.SubscribeChainHeadEvent"," subscribe change events header")
+	log.Debug("binhnt.core.blockchain","BlockChain.SubscribeChainHeadEvent"," subscribe change events header")
 
 	return bc.scope.Track(bc.chainHeadFeed.Subscribe(ch))
 }
 
 // SubscribeChainSideEvent registers a subscription of ChainSideEvent.
 func (bc *BlockChain) SubscribeChainSideEvent(ch chan<- ChainSideEvent) event.Subscription {
-	fmt.Println("binhnt.core.blockchain","BlockChain.SubscribeChainSideEvent"," subscribe chainside events")
+	log.Debug("binhnt.core.blockchain","BlockChain.SubscribeChainSideEvent"," subscribe chainside events")
 	return bc.scope.Track(bc.chainSideFeed.Subscribe(ch))
 }
 
 // SubscribeLogsEvent registers a subscription of []*types.Log.
 func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
-	fmt.Println("binhnt.core.blockchain","BlockChain.SubscribeLogsEvent"," subscribe log events")
+	log.Debug("binhnt.core.blockchain","BlockChain.SubscribeLogsEvent"," subscribe log events")
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
 }
