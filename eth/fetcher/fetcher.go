@@ -21,7 +21,7 @@ import (
 	"errors"
 	"math/rand"
 	"time"
-
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -30,6 +30,7 @@ import (
 )
 
 const (
+	//arriveTimeout = 500 * time.Millisecond // Time allowance before an announced block is explicitly requested
 	arriveTimeout = 500 * time.Millisecond // Time allowance before an announced block is explicitly requested
 	gatherSlack   = 100 * time.Millisecond // Interval used to collate almost-expired announces with fetches
 	fetchTimeout  = 5 * time.Second        // Maximum allotted time to return an explicitly requested block
@@ -277,295 +278,319 @@ func (f *Fetcher) FilterBodies(peer string, transactions [][]*types.Transaction,
 // Loop is the main fetcher loop, checking and processing various notification
 // events.
 func (f *Fetcher) loop() {
+	log.Debug("eth.fetcher.fetcher","Fetcher.loop()","start fectcher")
 	// Iterate the block fetching until a quit is requested
 	fetchTimer := time.NewTimer(0)
 	completeTimer := time.NewTimer(0)
 
 	for {
 		// Clean up any expired block fetches
+		log.Debug("eth.fetcher.fetcher","Fetcher.loop()","Clean up any expired block fetches")
 		for hash, announce := range f.fetching {
-			if time.Since(announce.time) > fetchTimeout {
-				f.forgetHash(hash)
-			}
+				if time.Since(announce.time) > fetchTimeout {
+					f.forgetHash(hash)
+				}
 		}
 		// Import any queued blocks that could potentially fit
+		log.Debug("eth.fetcher.fetcher","Fetcher.loop()","Import any queued blocks that could potentially fit")
 		height := f.chainHeight()
 		for !f.queue.Empty() {
-			op := f.queue.PopItem().(*inject)
-			hash := op.block.Hash()
-			if f.queueChangeHook != nil {
-				f.queueChangeHook(hash, false)
-			}
-			// If too high up the chain or phase, continue later
-			number := op.block.NumberU64()
-			if number > height+1 {
-				f.queue.Push(op, -int64(number))
-				if f.queueChangeHook != nil {
-					f.queueChangeHook(hash, true)
-				}
-				break
-			}
-			// Otherwise if fresh and still unknown, try and import
-			if number+maxUncleDist < height || f.getBlock(hash) != nil {
-				f.forgetBlock(hash)
-				continue
-			}
-			f.insert(op.origin, op.block)
+					op := f.queue.PopItem().(*inject)
+					hash := op.block.Hash()
+					if f.queueChangeHook != nil {
+						f.queueChangeHook(hash, false)
+					}
+					// If too high up the chain or phase, continue later
+					number := op.block.NumberU64()
+					if number > height+1 {
+						f.queue.Push(op, -int64(number))
+						if f.queueChangeHook != nil {
+							f.queueChangeHook(hash, true)
+						}
+						break
+					}
+					// Otherwise if fresh and still unknown, try and import
+					if number+maxUncleDist < height || f.getBlock(hash) != nil {
+						f.forgetBlock(hash)
+						continue
+					}
+					log.Debug("eth.fetcher.fetcher","Fetcher.loop()","call import block")
+					f.insert(op.origin, op.block)
 		}
 		// Wait for an outside event to occur
 		select {
-		case <-f.quit:
+			case <-f.quit:
 			// Fetcher terminating, abort all operations
 			return
 
-		case notification := <-f.notify:
-			// A block was announced, make sure the peer isn't DOSing us
-			propAnnounceInMeter.Mark(1)
+			case notification := <-f.notify:
+					log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event notify: A block was announced, make sure the peer isn't DOSing us")
 
-			count := f.announces[notification.origin] + 1
-			if count > hashLimit {
-				log.Debug("Peer exceeded outstanding announces", "peer", notification.origin, "limit", hashLimit)
-				propAnnounceDOSMeter.Mark(1)
-				break
-			}
-			// If we have a valid block number, check that it's potentially useful
-			if notification.number > 0 {
-				if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
-					log.Debug("Peer discarded announcement", "peer", notification.origin, "number", notification.number, "hash", notification.hash, "distance", dist)
-					propAnnounceDropMeter.Mark(1)
-					break
+						// A block was announced, make sure the peer isn't DOSing us
+						propAnnounceInMeter.Mark(1)
+
+						count := f.announces[notification.origin] + 1
+						if count > hashLimit {
+							log.Debug("Peer exceeded outstanding announces", "peer", notification.origin, "limit", hashLimit)
+							propAnnounceDOSMeter.Mark(1)
+							break
+						}
+						// If we have a valid block number, check that it's potentially useful
+						if notification.number > 0 {
+							if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
+								log.Debug("Peer discarded announcement", "peer", notification.origin, "number", notification.number, "hash", notification.hash, "distance", dist)
+								propAnnounceDropMeter.Mark(1)
+								break
+							}
+						}
+						// All is well, schedule the announce if block's not yet downloading
+						if _, ok := f.fetching[notification.hash]; ok {
+							break
+						}
+						if _, ok := f.completing[notification.hash]; ok {
+							break
+						}
+						f.announces[notification.origin] = count
+						f.announced[notification.hash] = append(f.announced[notification.hash], notification)
+						if f.announceChangeHook != nil && len(f.announced[notification.hash]) == 1 {
+							f.announceChangeHook(notification.hash, true)
+						}
+						if len(f.announced) == 1 {
+							f.rescheduleFetch(fetchTimer)
+						}
+
+			case op := <-f.inject:
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event inject: propBroadcastInMete and call enqueue")
+				// A direct block insertion was requested, try and fill any pending gaps
+				propBroadcastInMeter.Mark(1)
+				f.enqueue(op.origin, op.block)
+
+			case hash := <-f.done:
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event done:  A pending import finished, remove all traces of the notification")
+				// A pending import finished, remove all traces of the notification
+				f.forgetHash(hash)
+				f.forgetBlock(hash)
+
+			case <-fetchTimer.C:
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event fetchTimer.C: At least one block's timer ran out, check for needing retrieval")
+
+				// At least one block's timer ran out, check for needing retrieval
+				request := make(map[string][]common.Hash)
+
+				for hash, announces := range f.announced {
+					if time.Since(announces[0].time) > arriveTimeout-gatherSlack {
+						// Pick a random peer to retrieve from, reset all others
+						announce := announces[rand.Intn(len(announces))]
+						f.forgetHash(hash)
+
+						// If the block still didn't arrive, queue for fetching
+						if f.getBlock(hash) == nil {
+							request[announce.origin] = append(request[announce.origin], hash)
+							f.fetching[hash] = announce
+						}
+					}
 				}
-			}
-			// All is well, schedule the announce if block's not yet downloading
-			if _, ok := f.fetching[notification.hash]; ok {
-				break
-			}
-			if _, ok := f.completing[notification.hash]; ok {
-				break
-			}
-			f.announces[notification.origin] = count
-			f.announced[notification.hash] = append(f.announced[notification.hash], notification)
-			if f.announceChangeHook != nil && len(f.announced[notification.hash]) == 1 {
-				f.announceChangeHook(notification.hash, true)
-			}
-			if len(f.announced) == 1 {
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event fetchTimer.C: Send out all block header requests")
+
+				// Send out all block header requests
+				for peer, hashes := range request {
+					log.Trace("Fetching scheduled headers", "peer", peer, "list", hashes)
+
+					// Create a closure of the fetch and schedule in on a new thread
+					fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
+					go func() {
+						if f.fetchingHook != nil {
+							f.fetchingHook(hashes)
+						}
+						for _, hash := range hashes {
+							headerFetchMeter.Mark(1)
+							fetchHeader(hash) // Suboptimal, but protocol doesn't allow batch header retrievals
+						}
+					}()
+				}
+				// Schedule the next fetch if blocks are still pending
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event fetchTimer.C: Schedule the next fetch if blocks are still pending")
 				f.rescheduleFetch(fetchTimer)
-			}
 
-		case op := <-f.inject:
-			// A direct block insertion was requested, try and fill any pending gaps
-			propBroadcastInMeter.Mark(1)
-			f.enqueue(op.origin, op.block)
+			case <-completeTimer.C:
+				// At least one header's timer ran out, retrieve everything
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event completeTimer.C: At least one header's timer ran out, retrieve everythingg")
+				request := make(map[string][]common.Hash)
 
-		case hash := <-f.done:
-			// A pending import finished, remove all traces of the notification
-			f.forgetHash(hash)
-			f.forgetBlock(hash)
-
-		case <-fetchTimer.C:
-			// At least one block's timer ran out, check for needing retrieval
-			request := make(map[string][]common.Hash)
-
-			for hash, announces := range f.announced {
-				if time.Since(announces[0].time) > arriveTimeout-gatherSlack {
+				for hash, announces := range f.fetched {
 					// Pick a random peer to retrieve from, reset all others
 					announce := announces[rand.Intn(len(announces))]
 					f.forgetHash(hash)
 
-					// If the block still didn't arrive, queue for fetching
+					// If the block still didn't arrive, queue for completion
 					if f.getBlock(hash) == nil {
 						request[announce.origin] = append(request[announce.origin], hash)
-						f.fetching[hash] = announce
+						f.completing[hash] = announce
 					}
 				}
-			}
-			// Send out all block header requests
-			for peer, hashes := range request {
-				log.Trace("Fetching scheduled headers", "peer", peer, "list", hashes)
+				// Send out all block body requests
+				for peer, hashes := range request {
+					log.Trace("Fetching scheduled bodies", "peer", peer, "list", hashes)
 
-				// Create a closure of the fetch and schedule in on a new thread
-				fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
-				go func() {
-					if f.fetchingHook != nil {
-						f.fetchingHook(hashes)
+					// Create a closure of the fetch and schedule in on a new thread
+					if f.completingHook != nil {
+						f.completingHook(hashes)
 					}
-					for _, hash := range hashes {
-						headerFetchMeter.Mark(1)
-						fetchHeader(hash) // Suboptimal, but protocol doesn't allow batch header retrievals
-					}
-				}()
-			}
-			// Schedule the next fetch if blocks are still pending
-			f.rescheduleFetch(fetchTimer)
-
-		case <-completeTimer.C:
-			// At least one header's timer ran out, retrieve everything
-			request := make(map[string][]common.Hash)
-
-			for hash, announces := range f.fetched {
-				// Pick a random peer to retrieve from, reset all others
-				announce := announces[rand.Intn(len(announces))]
-				f.forgetHash(hash)
-
-				// If the block still didn't arrive, queue for completion
-				if f.getBlock(hash) == nil {
-					request[announce.origin] = append(request[announce.origin], hash)
-					f.completing[hash] = announce
+					bodyFetchMeter.Mark(int64(len(hashes)))
+					go f.completing[hashes[0]].fetchBodies(hashes)
 				}
-			}
-			// Send out all block body requests
-			for peer, hashes := range request {
-				log.Trace("Fetching scheduled bodies", "peer", peer, "list", hashes)
+				// Schedule the next fetch if blocks are still pending
+				f.rescheduleComplete(completeTimer)
 
-				// Create a closure of the fetch and schedule in on a new thread
-				if f.completingHook != nil {
-					f.completingHook(hashes)
-				}
-				bodyFetchMeter.Mark(int64(len(hashes)))
-				go f.completing[hashes[0]].fetchBodies(hashes)
-			}
-			// Schedule the next fetch if blocks are still pending
-			f.rescheduleComplete(completeTimer)
+			case filter := <-f.headerFilter:
+					log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event headerFilter:  Headers arrived from a remote peer. Extract those that were explicitly requested by the fetcher")
 
-		case filter := <-f.headerFilter:
-			// Headers arrived from a remote peer. Extract those that were explicitly
-			// requested by the fetcher, and return everything else so it's delivered
-			// to other parts of the system.
-			var task *headerFilterTask
-			select {
-			case task = <-filter:
-			case <-f.quit:
-				return
-			}
-			headerFilterInMeter.Mark(int64(len(task.headers)))
-
-			// Split the batch of headers into unknown ones (to return to the caller),
-			// known incomplete ones (requiring body retrievals) and completed blocks.
-			unknown, incomplete, complete := []*types.Header{}, []*announce{}, []*types.Block{}
-			for _, header := range task.headers {
-				hash := header.Hash()
-
-				// Filter fetcher-requested headers from other synchronisation algorithms
-				if announce := f.fetching[hash]; announce != nil && announce.origin == task.peer && f.fetched[hash] == nil && f.completing[hash] == nil && f.queued[hash] == nil {
-					// If the delivered header does not match the promised number, drop the announcer
-					if header.Number.Uint64() != announce.number {
-						log.Trace("Invalid block number fetched", "peer", announce.origin, "hash", header.Hash(), "announced", announce.number, "provided", header.Number)
-						f.dropPeer(announce.origin)
-						f.forgetHash(hash)
-						continue
+					// Headers arrived from a remote peer. Extract those that were explicitly
+					// requested by the fetcher, and return everything else so it's delivered
+					// to other parts of the system.
+					var task *headerFilterTask
+					select {
+					case task = <-filter:
+					case <-f.quit:
+						return
 					}
-					// Only keep if not imported by other means
-					if f.getBlock(hash) == nil {
-						announce.header = header
-						announce.time = task.time
+					headerFilterInMeter.Mark(int64(len(task.headers)))
 
-						// If the block is empty (header only), short circuit into the final import queue
-						if header.TxHash == types.DeriveSha(types.Transactions{}) && header.UncleHash == types.CalcUncleHash([]*types.Header{}) {
-							log.Trace("Block empty, skipping body retrieval", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
+					// Split the batch of headers into unknown ones (to return to the caller),
+					// known incomplete ones (requiring body retrievals) and completed blocks.
+					unknown, incomplete, complete := []*types.Header{}, []*announce{}, []*types.Block{}
+					for _, header := range task.headers {
+						hash := header.Hash()
 
-							block := types.NewBlockWithHeader(header)
-							block.ReceivedAt = task.time
+						// Filter fetcher-requested headers from other synchronisation algorithms
+						if announce := f.fetching[hash]; announce != nil && announce.origin == task.peer && f.fetched[hash] == nil && f.completing[hash] == nil && f.queued[hash] == nil {
+							// If the delivered header does not match the promised number, drop the announcer
+							if header.Number.Uint64() != announce.number {
+								log.Trace("Invalid block number fetched", "peer", announce.origin, "hash", header.Hash(), "announced", announce.number, "provided", header.Number)
+								f.dropPeer(announce.origin)
+								f.forgetHash(hash)
+								continue
+							}
+							// Only keep if not imported by other means
+							if f.getBlock(hash) == nil {
+								announce.header = header
+								announce.time = task.time
 
-							complete = append(complete, block)
-							f.completing[hash] = announce
+								// If the block is empty (header only), short circuit into the final import queue
+								if header.TxHash == types.DeriveSha(types.Transactions{}) && header.UncleHash == types.CalcUncleHash([]*types.Header{}) {
+									log.Trace("Block empty, skipping body retrieval", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
+
+									block := types.NewBlockWithHeader(header)
+									block.ReceivedAt = task.time
+
+									complete = append(complete, block)
+									f.completing[hash] = announce
+									continue
+								}
+								// Otherwise add to the list of blocks needing completion
+								incomplete = append(incomplete, announce)
+							} else {
+								log.Trace("Block already imported, discarding header", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
+								f.forgetHash(hash)
+							}
+						} else {
+							// Fetcher doesn't know about it, add to the return list
+							unknown = append(unknown, header)
+						}
+					}
+					headerFilterOutMeter.Mark(int64(len(unknown)))
+					select {
+					case filter <- &headerFilterTask{headers: unknown, time: task.time}:
+					case <-f.quit:
+						return
+					}
+					// Schedule the retrieved headers for body completion
+					for _, announce := range incomplete {
+						hash := announce.header.Hash()
+						if _, ok := f.completing[hash]; ok {
 							continue
 						}
-						// Otherwise add to the list of blocks needing completion
-						incomplete = append(incomplete, announce)
-					} else {
-						log.Trace("Block already imported, discarding header", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
-						f.forgetHash(hash)
+						f.fetched[hash] = append(f.fetched[hash], announce)
+						if len(f.fetched) == 1 {
+							f.rescheduleComplete(completeTimer)
+						}
 					}
-				} else {
-					// Fetcher doesn't know about it, add to the return list
-					unknown = append(unknown, header)
+					// Schedule the header-only blocks for import
+					for _, block := range complete {
+						if announce := f.completing[block.Hash()]; announce != nil {
+							f.enqueue(announce.origin, block)
+						}
+					}
+
+			case filter := <-f.bodyFilter:
+				log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event bodyFilter:  Block bodies arrived, extract any explicitly requested blocks, return the rest")
+
+				// Block bodies arrived, extract any explicitly requested blocks, return the rest
+				var task *bodyFilterTask
+				select {
+						case task = <-filter:
+						case <-f.quit:
+							return
 				}
-			}
-			headerFilterOutMeter.Mark(int64(len(unknown)))
-			select {
-			case filter <- &headerFilterTask{headers: unknown, time: task.time}:
-			case <-f.quit:
-				return
-			}
-			// Schedule the retrieved headers for body completion
-			for _, announce := range incomplete {
-				hash := announce.header.Hash()
-				if _, ok := f.completing[hash]; ok {
-					continue
-				}
-				f.fetched[hash] = append(f.fetched[hash], announce)
-				if len(f.fetched) == 1 {
-					f.rescheduleComplete(completeTimer)
-				}
-			}
-			// Schedule the header-only blocks for import
-			for _, block := range complete {
-				if announce := f.completing[block.Hash()]; announce != nil {
-					f.enqueue(announce.origin, block)
-				}
-			}
+				bodyFilterInMeter.Mark(int64(len(task.transactions)))
 
-		case filter := <-f.bodyFilter:
-			// Block bodies arrived, extract any explicitly requested blocks, return the rest
-			var task *bodyFilterTask
-			select {
-			case task = <-filter:
-			case <-f.quit:
-				return
-			}
-			bodyFilterInMeter.Mark(int64(len(task.transactions)))
+				blocks := []*types.Block{}
+				for i := 0; i < len(task.transactions) && i < len(task.uncles); i++ {
+					// Match up a body to any possible completion request
+					log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event bodyFilter: Match up a body to any possible completion request")
 
-			blocks := []*types.Block{}
-			for i := 0; i < len(task.transactions) && i < len(task.uncles); i++ {
-				// Match up a body to any possible completion request
-				matched := false
+					matched := false
 
-				for hash, announce := range f.completing {
-					if f.queued[hash] == nil {
-						txnHash := types.DeriveSha(types.Transactions(task.transactions[i]))
-						uncleHash := types.CalcUncleHash(task.uncles[i])
+					for hash, announce := range f.completing {
+						if f.queued[hash] == nil {
+							txnHash := types.DeriveSha(types.Transactions(task.transactions[i]))
+							uncleHash := types.CalcUncleHash(task.uncles[i])
 
-						if txnHash == announce.header.TxHash && uncleHash == announce.header.UncleHash && announce.origin == task.peer {
-							// Mark the body matched, reassemble if still unknown
-							matched = true
+							if txnHash == announce.header.TxHash && uncleHash == announce.header.UncleHash && announce.origin == task.peer {
+								// Mark the body matched, reassemble if still unknown
+								matched = true
 
-							if f.getBlock(hash) == nil {
-								block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i])
-								block.ReceivedAt = task.time
+								if f.getBlock(hash) == nil {
+									block := types.NewBlockWithHeader(announce.header).WithBody(task.transactions[i], task.uncles[i])
+									block.ReceivedAt = task.time
 
-								blocks = append(blocks, block)
-							} else {
-								f.forgetHash(hash)
+									blocks = append(blocks, block)
+								} else {
+									f.forgetHash(hash)
+								}
 							}
 						}
 					}
+					if matched {
+						task.transactions = append(task.transactions[:i], task.transactions[i+1:]...)
+						task.uncles = append(task.uncles[:i], task.uncles[i+1:]...)
+						i--
+						continue
+					}
 				}
-				if matched {
-					task.transactions = append(task.transactions[:i], task.transactions[i+1:]...)
-					task.uncles = append(task.uncles[:i], task.uncles[i+1:]...)
-					i--
-					continue
-				}
-			}
 
-			bodyFilterOutMeter.Mark(int64(len(task.transactions)))
-			select {
-			case filter <- task:
-			case <-f.quit:
-				return
-			}
-			// Schedule the retrieved blocks for ordered import
-			for _, block := range blocks {
-				if announce := f.completing[block.Hash()]; announce != nil {
-					f.enqueue(announce.origin, block)
+				bodyFilterOutMeter.Mark(int64(len(task.transactions)))
+				select {
+						case filter <- task:
+						case <-f.quit:
+							return
+				}
+				// Schedule the retrieved blocks for ordered import
+				for _, block := range blocks {
+					log.Debug("eth.fetcher.fetcher","Fetcher.loop()","event bodyFilter: Schedule the retrieved blocks for ordered import")
+
+					if announce := f.completing[block.Hash()]; announce != nil {
+							f.enqueue(announce.origin, block)
+					}
 				}
 			}
-		}
 	}
 }
 
 // rescheduleFetch resets the specified fetch timer to the next announce timeout.
 func (f *Fetcher) rescheduleFetch(fetch *time.Timer) {
+	log.Debug("eth.fetcher.fetcher","Fetcher.rescheduleFetch","reschedule Fetch  ")
+
 	// Short circuit if no blocks are announced
 	if len(f.announced) == 0 {
 		return
@@ -582,6 +607,8 @@ func (f *Fetcher) rescheduleFetch(fetch *time.Timer) {
 
 // rescheduleComplete resets the specified completion timer to the next fetch timeout.
 func (f *Fetcher) rescheduleComplete(complete *time.Timer) {
+	log.Debug("eth.fetcher.fetcher","Fetcher.rescheduleComplete","reschedule complete  ")
+
 	// Short circuit if no headers are fetched
 	if len(f.fetched) == 0 {
 		return
@@ -599,6 +626,7 @@ func (f *Fetcher) rescheduleComplete(complete *time.Timer) {
 // enqueue schedules a new future import operation, if the block to be imported
 // has not yet been seen.
 func (f *Fetcher) enqueue(peer string, block *types.Block) {
+	fmt.Print("binhnt.eth.fetcher.fetcher","Fetcher.enqueue"," start enqueue")
 	hash := block.Hash()
 
 	// Ensure the peer isn't DOSing us
@@ -636,7 +664,7 @@ func (f *Fetcher) enqueue(peer string, block *types.Block) {
 // block's number is at the same height as the current import phase, it updates
 // the phase states accordingly.
 func (f *Fetcher) insert(peer string, block *types.Block) {
-	fmt.Println("binhnt.eth.fetcher.fetcher","Fetcher.insert","start insert ")
+	log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.insert","start insert ")
 	hash := block.Hash()
 
 	// Run the import on a new thread
@@ -645,11 +673,13 @@ func (f *Fetcher) insert(peer string, block *types.Block) {
 		defer func() { f.done <- hash }()
 
 		// If the parent's unknown, abort insertion
+	  log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.insert","get parent and check  ")
 		parent := f.getBlock(block.ParentHash())
 		if parent == nil {
 			log.Debug("Unknown parent of propagated block", "peer", peer, "number", block.Number(), "hash", hash, "parent", block.ParentHash())
 			return
 		}
+		log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.insert","Quickly validate the header and propagate the block if it passes  ")
 		// Quickly validate the header and propagate the block if it passes
 		switch err := f.verifyHeader(block.Header()); err {
 		case nil:
@@ -666,12 +696,14 @@ func (f *Fetcher) insert(peer string, block *types.Block) {
 			f.dropPeer(peer)
 			return
 		}
+		log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.insert","Run the actual import and log any issues  ")
 		// Run the actual import and log any issues
 		if _, err := f.insertChain(types.Blocks{block}); err != nil {
 			log.Debug("Propagated block import failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)
 			return
 		}
 		// If import succeeded, broadcast the block
+		log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.insert","If import succeeded, broadcast the block ")
 		propAnnounceOutTimer.UpdateSince(block.ReceivedAt)
 		go f.broadcastBlock(block, false)
 

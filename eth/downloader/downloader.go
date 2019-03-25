@@ -206,6 +206,7 @@ type BlockChain interface {
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn) *Downloader {
+	fmt.Println("binhnt.eth.downloader.downloader","New","start a downloader")
 	if lightchain == nil {
 		lightchain = chain
 	}
@@ -248,18 +249,19 @@ func New(mode SyncMode, stateDb ethdb.Database, mux *event.TypeMux, chain BlockC
 // of processed and the total number of known states are also returned. Otherwise
 // these are zero.
 func (d *Downloader) Progress() ethereum.SyncProgress {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.Progress()"," start Progress ")
 	// Lock the current stats and return the progress
 	d.syncStatsLock.RLock()
 	defer d.syncStatsLock.RUnlock()
 
 	current := uint64(0)
 	switch d.mode {
-	case FullSync:
-		current = d.blockchain.CurrentBlock().NumberU64()
-	case FastSync:
-		current = d.blockchain.CurrentFastBlock().NumberU64()
-	case LightSync:
-		current = d.lightchain.CurrentHeader().Number.Uint64()
+		case FullSync:
+			current = d.blockchain.CurrentBlock().NumberU64()
+		case FastSync:
+			current = d.blockchain.CurrentFastBlock().NumberU64()
+		case LightSync:
+			current = d.lightchain.CurrentHeader().Number.Uint64()
 	}
 	return ethereum.SyncProgress{
 		StartingBlock: d.syncStatsChainOrigin,
@@ -278,6 +280,7 @@ func (d *Downloader) Synchronising() bool {
 // RegisterPeer injects a new download peer into the set of block source to be
 // used for fetching hashes and blocks from.
 func (d *Downloader) RegisterPeer(id string, version int, peer Peer) error {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.RegisterPeer"," register peer: ",id)
 	logger := log.New("peer", id)
 	logger.Trace("Registering sync peer")
 	if err := d.peers.Register(newPeerConnection(id, version, peer, logger)); err != nil {
@@ -321,24 +324,26 @@ func (d *Downloader) UnregisterPeer(id string) error {
 // Synchronise tries to sync up our local block chain with a remote peer, both
 // adding various sanity checks as well as wrapping it with various log entries.
 func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode SyncMode) error {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.Synchronise"," start Synchronise")
+
 	err := d.synchronise(id, head, td, mode)
 	switch err {
-	case nil:
-	case errBusy:
+		case nil:
+		case errBusy:
 
-	case errTimeout, errBadPeer, errStallingPeer,
-		errEmptyHeaderSet, errPeersUnavailable, errTooOld,
-		errInvalidAncestor, errInvalidChain:
-		log.Warn("Synchronisation failed, dropping peer", "peer", id, "err", err)
-		if d.dropPeer == nil {
-			// The dropPeer method is nil when `--copydb` is used for a local copy.
-			// Timeouts can occur if e.g. compaction hits at the wrong time, and can be ignored
-			log.Warn("Downloader wants to drop peer, but peerdrop-function is not set", "peer", id)
-		} else {
-			d.dropPeer(id)
-		}
-	default:
-		log.Warn("Synchronisation failed, retrying", "err", err)
+		case errTimeout, errBadPeer, errStallingPeer,
+			errEmptyHeaderSet, errPeersUnavailable, errTooOld,
+			errInvalidAncestor, errInvalidChain:
+			log.Warn("Synchronisation failed, dropping peer", "peer", id, "err", err)
+			if d.dropPeer == nil {
+				// The dropPeer method is nil when `--copydb` is used for a local copy.
+				// Timeouts can occur if e.g. compaction hits at the wrong time, and can be ignored
+				log.Warn("Downloader wants to drop peer, but peerdrop-function is not set", "peer", id)
+			} else {
+				d.dropPeer(id)
+			}
+		default:
+			log.Warn("Synchronisation failed, retrying", "err", err)
 	}
 	return err
 }
@@ -347,6 +352,8 @@ func (d *Downloader) Synchronise(id string, head common.Hash, td *big.Int, mode 
 // it will use the best peer possible and synchronize if its TD is higher than our own. If any of the
 // checks fail an error will be returned. This method is synchronous
 func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode SyncMode) error {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.Synchronise"," start synchronise")
+
 	// Mock out the synchronisation if testing
 	if d.synchroniseMock != nil {
 		return d.synchroniseMock(id, hash)
@@ -409,6 +416,8 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td *big.Int, mode 
 // syncWithPeer starts a block synchronization based on the hash chain from the
 // specified peer and head hash.
 func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.Int) (err error) {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.syncWithPeer"," start syncWithPeer")
+
 	d.mux.Post(StartEvent{})
 	defer func() {
 		// reset on error
@@ -1707,9 +1716,12 @@ func (d *Downloader) deliver(id string, destCh chan dataPack, packet dataPack, i
 // qosTuner is the quality of service tuning loop that occasionally gathers the
 // peer latency statistics and updates the estimated request round trip time.
 func (d *Downloader) qosTuner() {
+	fmt.Println("binhnt.eth.downloader.downloader","Downloader.qosTuner"," start recalucate Qos Tuner")
 	for {
 		// Retrieve the current median RTT and integrate into the previoust target RTT
-		rtt := time.Duration((1-qosTuningImpact)*float64(atomic.LoadUint64(&d.rttEstimate)) + qosTuningImpact*float64(d.peers.medianRTT()))
+		rtt := time.Duration(100*(1-qosTuningImpact)*float64(atomic.LoadUint64(&d.rttEstimate)) + 100*qosTuningImpact*float64(d.peers.medianRTT()))
+		fmt.Println("binhnt.eth.downloader.downloader","Downloader.qosTuner"," rtt: = ",rtt)
+
 		atomic.StoreUint64(&d.rttEstimate, uint64(rtt))
 
 		// A new RTT cycle passed, increase our confidence in the estimated RTT
@@ -1720,9 +1732,9 @@ func (d *Downloader) qosTuner() {
 		// Log the new QoS values and sleep until the next RTT
 		log.Debug("Recalculated downloader QoS values", "rtt", rtt, "confidence", float64(conf)/1000000.0, "ttl", d.requestTTL())
 		select {
-		case <-d.quitCh:
-			return
-		case <-time.After(rtt):
+					case <-d.quitCh:
+							return
+					case <-time.After(rtt):
 		}
 	}
 }

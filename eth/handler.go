@@ -711,11 +711,13 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 // BroadcastBlock will either propagate a block to a subset of it's peers, or
 // will only announce it's availability (depending what's requested).
 func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
+	fmt.Println("binhnt.eth.handler","ProtocolManager.BroadcastBlock"," broadcast block")
 	hash := block.Hash()
 	peers := pm.peers.PeersWithoutBlock(hash)
 
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
+		fmt.Println("binhnt.eth.handler","ProtocolManager.BroadcastBlock"," If propagation is requested, send to a subset of the peer")
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
 		if parent := pm.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
@@ -725,6 +727,8 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 			return
 		}
 		// Send the block to a subset of our peers
+		fmt.Println("binhnt.eth.handler","ProtocolManager.BroadcastBlock"," Send the block to a subset of our peers")
+
 		transferLen := int(math.Sqrt(float64(len(peers))))
 		if transferLen < minBroadcastPeers {
 			transferLen = minBroadcastPeers
@@ -742,6 +746,7 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 	// Otherwise if the block is indeed in out own chain, announce it
 	if pm.blockchain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
+			
 			peer.AsyncSendNewBlockHash(block)
 		}
 		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
