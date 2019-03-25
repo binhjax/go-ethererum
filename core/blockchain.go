@@ -1155,6 +1155,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 	defer close(abort)
 
 	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Peek the error for the first block to decide the directing import logic")
+
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.Validator())
 

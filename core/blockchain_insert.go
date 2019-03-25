@@ -90,6 +90,7 @@ type insertIterator struct {
 // newInsertIterator creates a new iterator based on the given blocks, which are
 // assumed to be a contiguous chain.
 func newInsertIterator(chain types.Blocks, results <-chan error, validator Validator) *insertIterator {
+	log.Debug("binhnt.core.blockchain_insert","newInsertIterator","create new newInsertIterator")
 	return &insertIterator{
 		chain:     chain,
 		results:   results,
@@ -101,14 +102,19 @@ func newInsertIterator(chain types.Blocks, results <-chan error, validator Valid
 // next returns the next block in the iterator, along with any potential validation
 // error for that block. When the end is reached, it will return (nil, nil).
 func (it *insertIterator) next() (*types.Block, error) {
+	log.Debug("binhnt.core.blockchain_insert","insertIterator.next()","get block in insertIterator ")
 	if it.index+1 >= len(it.chain) {
 		it.index = len(it.chain)
 		return nil, nil
 	}
 	it.index++
+	log.Debug("binhnt.core.blockchain_insert","insertIterator.next()","insertIterator index = " , it.index)
+
 	if err := <-it.results; err != nil {
+		log.Debug("binhnt.core.blockchain_insert","insertIterator.next()"," eror in it.results")
 		return it.chain[it.index], err
 	}
+	log.Debug("binhnt.core.blockchain_insert","insertIterator.next()","call validator.ValidateBody")
 	return it.chain[it.index], it.validator.ValidateBody(it.chain[it.index])
 }
 
