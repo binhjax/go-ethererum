@@ -709,6 +709,7 @@ func (f *Fetcher) insert(peer string, block *types.Block) {
 
 		// Invoke the testing hook if needed
 		if f.importedHook != nil {
+			log.Debug("binhnt.eth.fetcher.fetcher","Fetcher.insert","call importedHook to testing hook if needed")
 			f.importedHook(block)
 		}
 	}()

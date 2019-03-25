@@ -729,17 +729,22 @@ func (bc *BlockChain) Stop() {
 }
 
 func (bc *BlockChain) procFutureBlocks() {
-	log.Debug("binhnt.core.blockchain","BlockChain.procFutureBlocks","start")
+	log.Debug("binhnt.core.blockchain","BlockChain.procFutureBlocks","start process future blocks")
 	blocks := make([]*types.Block, 0, bc.futureBlocks.Len())
 	for _, hash := range bc.futureBlocks.Keys() {
 		if block, exist := bc.futureBlocks.Peek(hash); exist {
+			log.Debug("binhnt.core.blockchain","BlockChain.procFutureBlocks","get future block and add queue" )
+
 			blocks = append(blocks, block.(*types.Block))
 		}
 	}
 	if len(blocks) > 0 {
+		log.Debug("binhnt.core.blockchain","BlockChain.procFutureBlocks","Sort future block" )
+
 		types.BlockBy(types.Number).Sort(blocks)
 
 		// Insert one by one as chain insertion needs contiguous ancestry between blocks
+		log.Debug("binhnt.core.blockchain","BlockChain.procFutureBlocks","Insert one by one as chain insertion needs contiguous ancestry between blocks" )
 		for i := range blocks {
 			bc.InsertChain(blocks[i : i+1])
 		}
@@ -1114,13 +1119,15 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []interface{}, []*types.Log, error) {
-	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","insert blocks")
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","insert blocks with verifySeals")
 
 	// If the chain is terminating, don't even bother starting u
 	if atomic.LoadInt32(&bc.procInterrupt) == 1 {
 		return 0, nil, nil, nil
 	}
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)")
+
 	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
 
 	// A queued approach to delivering events. This is generally
@@ -1132,6 +1139,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 		lastCanon     *types.Block
 		coalescedLogs []*types.Log
 	)
+
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Start the parallel header verifier")
 	// Start the parallel header verifier
 	headers := make([]*types.Header, len(chain))
 	seals := make([]bool, len(chain))
@@ -1145,6 +1154,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
 
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Peek the error for the first block to decide the directing import logic")
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.Validator())
 
@@ -1152,12 +1162,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 	switch {
 				// First block is pruned, insert as sidechain and reorg only if TD grows enough
 				case err == consensus.ErrPrunedAncestor:
+					log.Debug("binhnt.core.blockchain","BlockChain.insertChain","ErrPrunedAncestor => insertSidechain")
 					return bc.insertSidechain(it)
 
 				// First block is future, shove it (and all children) to the future queue (unknown ancestor)
 				case err == consensus.ErrFutureBlock || (err == consensus.ErrUnknownAncestor && bc.futureBlocks.Contains(it.first().ParentHash())):
+					log.Debug("binhnt.core.blockchain","BlockChain.insertChain","ErrUnknownAncestor => First block is future, shove it (and all children) to the future queue (unknown ancestor)")
+
 					for block != nil && (it.index == 0 || err == consensus.ErrUnknownAncestor) {
+						log.Debug("binhnt.core.blockchain","BlockChain.insertChain","call bc.addFutureBlock(block)")
+
 						if err := bc.addFutureBlock(block); err != nil {
+							log.Debug("binhnt.core.blockchain","BlockChain.insertChain","call addFutureBlock successfully ")
 							return it.index, events, coalescedLogs, err
 						}
 						block, err = it.next()
@@ -1174,6 +1190,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 				// 	    from the canonical chain, which has not been verified.
 				case err == ErrKnownBlock:
 					// Skip all known blocks that behind us
+					log.Debug("binhnt.core.blockchain","BlockChain.insertChain","ErrKnownBlock => Skip all known blocks that behind us")
+
 					current := bc.CurrentBlock().NumberU64()
 
 					for block != nil && err == ErrKnownBlock && current >= block.NumberU64() {
@@ -1184,12 +1202,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 
 				// Some other error occurred, abort
 				case err != nil:
+					log.Debug("binhnt.core.blockchain","BlockChain.insertChain","err != nil => reportBlock")
 					stats.ignored += len(it.chain)
 					bc.reportBlock(block, nil, err)
 					return it.index, events, coalescedLogs, err
 	}
 
 	// No validation errors for the first block (or chain prefix skipped)
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","No validation errors for the first block (or chain prefix skipped)")
+
 	for ; block != nil && err == nil; block, err = it.next() {
 				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","process each blocks")
 				// If the chain is terminating, stop processing blocks
@@ -1198,11 +1219,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 					break
 				}
 				// If the header is a banned one, straight out abort
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","If the header is a banned one, straight out abort")
 				if BadHashes[block.Hash()] {
 					bc.reportBlock(block, nil, ErrBlacklistedHash)
 					return it.index, events, coalescedLogs, ErrBlacklistedHash
 				}
 				// Retrieve the parent block and it's state to execute on top
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Retrieve the parent block and it's state to execute on top")
+
 				start := time.Now()
 
 				parent := it.previous()
@@ -1265,14 +1289,19 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 										"root", block.Root())
 									events = append(events, ChainSideEvent{block})
 				}
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","call blockInsertTimer.UpdateSince(start) ")
 				blockInsertTimer.UpdateSince(start)
 				stats.processed++
 				stats.usedGas += usedGas
 
 				cache, _ := bc.stateCache.TrieDB().Size()
+
+				log.Debug("binhnt.core.blockchain","BlockChain.insertChain","call stats.report")
 				stats.report(chain, it.index, cache)
 	}
 	// Any blocks remaining here? The only ones we care about are the future ones
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Any blocks remaining here? The only ones we care about are the future ones")
+
 	if block != nil && err == consensus.ErrFutureBlock {
 			if err := bc.addFutureBlock(block); err != nil {
 					return it.index, events, coalescedLogs, err
@@ -1289,6 +1318,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 	stats.ignored += it.remaining()
 
 	// Append a single chain head event if we've progressed the chain
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Append a single chain head event if we've progressed the chain")
+
 	if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
 			events = append(events, ChainHeadEvent{lastCanon})
 	}
@@ -1552,16 +1583,18 @@ func (bc *BlockChain) PostChainEvents(events []interface{}, logs []*types.Log) {
 }
 
 func (bc *BlockChain) update() {
-	futureTimer := time.NewTicker(5 * time.Second)
-	defer futureTimer.Stop()
-	for {
-		select {
-		case <-futureTimer.C:
-			bc.procFutureBlocks()
-		case <-bc.quit:
-			return
+		log.Debug("binhnt.core.blockchain","BlockChain.update"," start timer for future process")
+		futureTimer := time.NewTicker(5 * time.Second)
+		defer futureTimer.Stop()
+		for {
+			select {
+			case <-futureTimer.C:
+				log.Debug("binhnt.core.blockchain","BlockChain.update"," futureTimer.C => call bc.procFutureBlocks")
+				bc.procFutureBlocks()
+			case <-bc.quit:
+				return
+			}
 		}
-	}
 }
 
 // BadBlocks returns a list of the last 'bad blocks' that the client has seen on the network
