@@ -21,7 +21,7 @@ import (
 	"errors"
 	"math/rand"
 	"time"
-	"fmt"
+	// "fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
