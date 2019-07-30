@@ -1,19 +1,3 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 // Package miner implements Ethereum block creation and mining.
 package miner
 
@@ -78,36 +62,36 @@ func (self *Miner) update() {
 
 	for {
 		select {
-		case ev := <-events.Chan():
-			if ev == nil {
-				return
-			}
-			fmt.Println("binhnt.miner.miner.go","update","Check event.Data.type")
-			switch ev.Data.(type) {
-			case downloader.StartEvent:
-				fmt.Println("binhnt.miner.miner.go","update","Start downloader event. Stop mining")
-				atomic.StoreInt32(&self.canStart, 0)
-				if self.Mining() {
-					self.Stop()
-					atomic.StoreInt32(&self.shouldStart, 1)
-					log.Info("Mining aborted due to sync")
-				}
-			case downloader.DoneEvent, downloader.FailedEvent:
-				fmt.Println("binhnt.miner.miner.go","update","Start downloader event (done or failed). Check to start or not")
+				case ev := <-events.Chan():
+					if ev == nil {
+						return
+					}
+					fmt.Println("binhnt.miner.miner.go","update","Check event.Data.type")
+					switch ev.Data.(type) {
+							case downloader.StartEvent:
+								fmt.Println("binhnt.miner.miner.go","update","Start downloader event. Stop mining")
+								atomic.StoreInt32(&self.canStart, 0)
+								if self.Mining() {
+										self.Stop()
+										atomic.StoreInt32(&self.shouldStart, 1)
+										log.Info("Mining aborted due to sync")
+								}
+							case downloader.DoneEvent, downloader.FailedEvent:
+									fmt.Println("binhnt.miner.miner.go","update","Start downloader event (done or failed). Check to start or not")
 
-				shouldStart := atomic.LoadInt32(&self.shouldStart) == 1
+									shouldStart := atomic.LoadInt32(&self.shouldStart) == 1
 
-				atomic.StoreInt32(&self.canStart, 1)
-				atomic.StoreInt32(&self.shouldStart, 0)
-				if shouldStart {
-					fmt.Println("binhnt.miner.miner.go","update","start mining thread")
-					self.Start(self.coinbase)
-				}
-				// stop immediately and ignore all further pending events
-				return
-			}
-		case <-self.exitCh:
-			return
+									atomic.StoreInt32(&self.canStart, 1)
+									atomic.StoreInt32(&self.shouldStart, 0)
+									if shouldStart {
+										fmt.Println("binhnt.miner.miner.go","update","start mining thread")
+										self.Start(self.coinbase)
+									}
+									// stop immediately and ignore all further pending events
+								return
+					}
+				case <-self.exitCh:
+					return
 		}
 	}
 }

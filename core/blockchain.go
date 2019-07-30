@@ -1154,6 +1154,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
 
+	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Binhnt check errors in engine.VerifyHeaders")
+	if err := <-results; err != nil {
+		log.Debug("binhnt.core.blockchain","BlockChain.insertChain",err)
+	}
+
 	log.Debug("binhnt.core.blockchain","BlockChain.insertChain","Peek the error for the first block to decide the directing import logic")
 
 	// Peek the error for the first block to decide the directing import logic
@@ -1560,7 +1565,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 // posts them into the event feed.
 // TODO: Should not expose PostChainEvents. The chain events should be posted in WriteBlock.
 func (bc *BlockChain) PostChainEvents(events []interface{}, logs []*types.Log) {
-	log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," receive events = ",events," logs = ",logs)
+	log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," receive events = " ,events)
 	// post event logs for further processing
 	if logs != nil {
 		log.Debug("binhnt.core.blockchain","BlockChain.PostChainEvents"," send logsFeed ",logs)

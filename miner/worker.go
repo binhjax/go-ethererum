@@ -1,19 +1,3 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package miner
 
 import (
@@ -363,70 +347,70 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," start loop and listening event")
 	for {
 		select {
-		case <-w.startCh:
-			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from startCh -> call commit function")
-			clearPending(w.chain.CurrentBlock().NumberU64())
-			timestamp = time.Now().Unix()
-			commit(false, commitInterruptNewHead)
+				case <-w.startCh:
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from startCh -> call commit function")
+					clearPending(w.chain.CurrentBlock().NumberU64())
+					timestamp = time.Now().Unix()
+					commit(false, commitInterruptNewHead)
 
-		case head := <-w.chainHeadCh:
-			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from chainHeadCh -> call commit function")
-			clearPending(head.Block.NumberU64())
-			timestamp = time.Now().Unix()
-			commit(false, commitInterruptNewHead)
+				case head := <-w.chainHeadCh:
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from chainHeadCh -> call commit function")
+					clearPending(head.Block.NumberU64())
+					timestamp = time.Now().Unix()
+					commit(false, commitInterruptNewHead)
 
-		case <-timer.C:
-			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from timer.C -> call commit function")
-			// If mining is running resubmit a new work cycle periodically to pull in
-			// higher priced transactions. Disable this overhead for pending blocks.
-			if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
-				log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," worker running and w.config.Clique == nil || w.config.Clique.Period > 0 ")
-				// Short circuit if no new transaction arrives.
-				if atomic.LoadInt32(&w.newTxs) == 0 {
-					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Short circuit if no new transaction arrives ")
-					timer.Reset(recommit)
-					continue
+				case <-timer.C:
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from timer.C -> call commit function")
+					// If mining is running resubmit a new work cycle periodically to pull in
+					// higher priced transactions. Disable this overhead for pending blocks.
+					if w.isRunning() && (w.config.Clique == nil || w.config.Clique.Period > 0) {
+						log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," worker running and w.config.Clique == nil || w.config.Clique.Period > 0 ")
+						// Short circuit if no new transaction arrives.
+						if atomic.LoadInt32(&w.newTxs) == 0 {
+							log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Short circuit if no new transaction arrives ")
+							timer.Reset(recommit)
+							continue
+						}
+						log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," call commit ")
+						commit(true, commitInterruptResubmit)
+					}
+
+				case interval := <-w.resubmitIntervalCh:
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitIntervalCh -> call commit function")
+					// Adjust resubmit interval explicitly by user.
+					if interval < minRecommitInterval {
+						log.Warn("Sanitizing miner recommit interval", "provided", interval, "updated", minRecommitInterval)
+						interval = minRecommitInterval
+					}
+					log.Info("Miner recommit interval update", "from", minRecommit, "to", interval)
+					minRecommit, recommit = interval, interval
+
+					if w.resubmitHook != nil {
+						w.resubmitHook(minRecommit, recommit)
+					}
+
+				case adjust := <-w.resubmitAdjustCh:
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitAdjustCh -> submit resubmit interval")
+					// Adjust resubmit interval by feedback.
+					if adjust.inc {
+						before := recommit
+						recalcRecommit(float64(recommit.Nanoseconds())/adjust.ratio, true)
+						log.Trace("Increase miner recommit interval", "from", before, "to", recommit)
+					} else {
+						before := recommit
+						recalcRecommit(float64(minRecommit.Nanoseconds()), false)
+						log.Trace("Decrease miner recommit interval", "from", before, "to", recommit)
+					}
+
+					if w.resubmitHook != nil {
+						w.resubmitHook(minRecommit, recommit)
+					}
+
+				case <-w.exitCh:
+					log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from exitCh -> return")
+
+					return
 				}
-				log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," call commit ")
-				commit(true, commitInterruptResubmit)
-			}
-
-		case interval := <-w.resubmitIntervalCh:
-			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitIntervalCh -> call commit function")
-			// Adjust resubmit interval explicitly by user.
-			if interval < minRecommitInterval {
-				log.Warn("Sanitizing miner recommit interval", "provided", interval, "updated", minRecommitInterval)
-				interval = minRecommitInterval
-			}
-			log.Info("Miner recommit interval update", "from", minRecommit, "to", interval)
-			minRecommit, recommit = interval, interval
-
-			if w.resubmitHook != nil {
-				w.resubmitHook(minRecommit, recommit)
-			}
-
-		case adjust := <-w.resubmitAdjustCh:
-			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from resubmitAdjustCh -> call commit function")
-			// Adjust resubmit interval by feedback.
-			if adjust.inc {
-				before := recommit
-				recalcRecommit(float64(recommit.Nanoseconds())/adjust.ratio, true)
-				log.Trace("Increase miner recommit interval", "from", before, "to", recommit)
-			} else {
-				before := recommit
-				recalcRecommit(float64(minRecommit.Nanoseconds()), false)
-				log.Trace("Decrease miner recommit interval", "from", before, "to", recommit)
-			}
-
-			if w.resubmitHook != nil {
-				w.resubmitHook(minRecommit, recommit)
-			}
-
-		case <-w.exitCh:
-			log.Debug("binhnt.miner.worker.go","worker.newWorkLoop"," Event from exitCh -> return")
-
-			return
-		}
 	}
 }
 
@@ -440,90 +424,90 @@ func (w *worker) mainLoop() {
 
 	for {
 		select {
-		case req := <-w.newWorkCh:
-			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from newWorkCh -> commitNewWork")
-			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
+				case req := <-w.newWorkCh:
+						log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from newWorkCh -> commitNewWork")
+						w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
-		case ev := <-w.chainSideCh:
-			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from chainSideCh ")
-			// Short circuit for duplicate side blocks
-			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
-				continue
-			}
-			if _, exist := w.remoteUncles[ev.Block.Hash()]; exist {
-				continue
-			}
-			// Add side block to possible uncle block set depending on the author.
-			if w.isLocalBlock != nil && w.isLocalBlock(ev.Block) {
-				w.localUncles[ev.Block.Hash()] = ev.Block
-			} else {
-				w.remoteUncles[ev.Block.Hash()] = ev.Block
-			}
-			// If our mining block contains less than 2 uncle blocks,
-			// add the new uncle block if valid and regenerate a mining block.
-			if w.isRunning() && w.current != nil && w.current.uncles.Cardinality() < 2 {
-				start := time.Now()
-				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
-					var uncles []*types.Header
-					w.current.uncles.Each(func(item interface{}) bool {
-						hash, ok := item.(common.Hash)
-						if !ok {
-							return false
+				case ev := <-w.chainSideCh:
+						log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from chainSideCh ")
+						// Short circuit for duplicate side blocks
+						if _, exist := w.localUncles[ev.Block.Hash()]; exist {
+							continue
 						}
-						uncle, exist := w.localUncles[hash]
-						if !exist {
-							uncle, exist = w.remoteUncles[hash]
+						if _, exist := w.remoteUncles[ev.Block.Hash()]; exist {
+							continue
 						}
-						if !exist {
-							return false
+						// Add side block to possible uncle block set depending on the author.
+						if w.isLocalBlock != nil && w.isLocalBlock(ev.Block) {
+							w.localUncles[ev.Block.Hash()] = ev.Block
+						} else {
+							w.remoteUncles[ev.Block.Hash()] = ev.Block
 						}
-						uncles = append(uncles, uncle.Header())
-						return false
-					})
-					w.commit(uncles, nil, true, start)
+						// If our mining block contains less than 2 uncle blocks,
+						// add the new uncle block if valid and regenerate a mining block.
+						if w.isRunning() && w.current != nil && w.current.uncles.Cardinality() < 2 {
+							start := time.Now()
+							if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
+								var uncles []*types.Header
+								w.current.uncles.Each(func(item interface{}) bool {
+									hash, ok := item.(common.Hash)
+									if !ok {
+										return false
+									}
+									uncle, exist := w.localUncles[hash]
+									if !exist {
+										uncle, exist = w.remoteUncles[hash]
+									}
+									if !exist {
+										return false
+									}
+									uncles = append(uncles, uncle.Header())
+									return false
+								})
+								w.commit(uncles, nil, true, start)
+							}
+						}
+
+				case ev := <-w.txsCh:
+					log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from txsCh ")
+
+					// Apply transactions to the pending state if we're not mining.
+					//
+					// Note all transactions received may not be continuous with transactions
+					// already included in the current mining block. These transactions will
+					// be automatically eliminated.
+					if !w.isRunning() && w.current != nil {
+						w.mu.RLock()
+						coinbase := w.coinbase
+						w.mu.RUnlock()
+
+						txs := make(map[common.Address]types.Transactions)
+						for _, tx := range ev.Txs {
+							acc, _ := types.Sender(w.current.signer, tx)
+							txs[acc] = append(txs[acc], tx)
+						}
+						txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
+						w.commitTransactions(txset, coinbase, nil)
+						w.updateSnapshot()
+					} else {
+						// If we're mining, but nothing is being processed, wake on new transactions
+						if w.config.Clique != nil && w.config.Clique.Period == 0 {
+							w.commitNewWork(nil, false, time.Now().Unix())
+						}
+					}
+					atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
+
+				// System stopped
+				case <-w.exitCh:
+					log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from exitCh => stop  ")
+					return
+				case <-w.txsSub.Err():
+					return
+				case <-w.chainHeadSub.Err():
+					return
+				case <-w.chainSideSub.Err():
+					return
 				}
-			}
-
-		case ev := <-w.txsCh:
-			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from txsCh ")
-
-			// Apply transactions to the pending state if we're not mining.
-			//
-			// Note all transactions received may not be continuous with transactions
-			// already included in the current mining block. These transactions will
-			// be automatically eliminated.
-			if !w.isRunning() && w.current != nil {
-				w.mu.RLock()
-				coinbase := w.coinbase
-				w.mu.RUnlock()
-
-				txs := make(map[common.Address]types.Transactions)
-				for _, tx := range ev.Txs {
-					acc, _ := types.Sender(w.current.signer, tx)
-					txs[acc] = append(txs[acc], tx)
-				}
-				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs)
-				w.commitTransactions(txset, coinbase, nil)
-				w.updateSnapshot()
-			} else {
-				// If we're mining, but nothing is being processed, wake on new transactions
-				if w.config.Clique != nil && w.config.Clique.Period == 0 {
-					w.commitNewWork(nil, false, time.Now().Unix())
-				}
-			}
-			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
-
-		// System stopped
-		case <-w.exitCh:
-			log.Debug("binhnt.miner.worker.go","worker.mainLoop"," event from exitCh => stop  ")
-			return
-		case <-w.txsSub.Err():
-			return
-		case <-w.chainHeadSub.Err():
-			return
-		case <-w.chainSideSub.Err():
-			return
-		}
 	}
 }
 
@@ -548,7 +532,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 					case task := <-w.taskCh:
-						log.Debug("binhnt.miner.worker.go","worker.taskLoop"," event taskCh:  Reject duplicate sealing work due to resubmitting ")
+						log.Debug("binhnt.miner.worker.go","worker.taskLoop"," event taskCh: calculate seal for transactions ")
 
 						if w.newTaskHook != nil {
 							w.newTaskHook(task)
@@ -778,6 +762,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 		// For the first two cases, the semi-finished work will be discarded.
 		// For the third case, the semi-finished work will be submitted to the consensus engine.
 		if interrupt != nil && atomic.LoadInt32(interrupt) != commitInterruptNone {
+			log.Debug("binhnt.miner.worker.go","worker.commitTransactions"," interrupt != nil && atomic.LoadInt32(interrupt) != commitInterruptNone")
 			// Notify resubmit loop to increase resubmitting interval due to too frequent commits.
 			if atomic.LoadInt32(interrupt) == commitInterruptResubmit {
 				ratio := float64(w.current.header.GasLimit-w.current.gasPool.Gas()) / float64(w.current.header.GasLimit)
@@ -819,33 +804,33 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 		logs, err := w.commitTransaction(tx, coinbase)
 		switch err {
-		case core.ErrGasLimitReached:
-			// Pop the current out-of-gas transaction without shifting in the next from the account
-			log.Trace("Gas limit exceeded for current block", "sender", from)
-			txs.Pop()
+				case core.ErrGasLimitReached:
+					// Pop the current out-of-gas transaction without shifting in the next from the account
+					log.Trace("Gas limit exceeded for current block", "sender", from)
+					txs.Pop()
 
-		case core.ErrNonceTooLow:
-			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Shift()
+				case core.ErrNonceTooLow:
+					// New head notification data race between the transaction pool and miner, shift
+					log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+					txs.Shift()
 
-		case core.ErrNonceTooHigh:
-			// Reorg notification data race between the transaction pool and miner, skip account =
-			log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
-			txs.Pop()
+				case core.ErrNonceTooHigh:
+					// Reorg notification data race between the transaction pool and miner, skip account =
+					log.Trace("Skipping account with hight nonce", "sender", from, "nonce", tx.Nonce())
+					txs.Pop()
 
-		case nil:
-			// Everything ok, collect the logs and shift in the next transaction from the same account
-			coalescedLogs = append(coalescedLogs, logs...)
-			w.current.tcount++
-			txs.Shift()
+				case nil:
+					// Everything ok, collect the logs and shift in the next transaction from the same account
+					coalescedLogs = append(coalescedLogs, logs...)
+					w.current.tcount++
+					txs.Shift()
 
-		default:
-			// Strange error, discard the transaction and get the next in line (note, the
-			// nonce-too-high clause will prevent us from executing in vain).
-			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
-			txs.Shift()
-		}
+				default:
+					// Strange error, discard the transaction and get the next in line (note, the
+					// nonce-too-high clause will prevent us from executing in vain).
+					log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+					txs.Shift()
+				}
 	}
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
@@ -963,6 +948,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if !noempty {
 		// Create an empty block based on temporary copied state for sealing in advance without waiting block
 		// execution finished.
+		log.Debug("binhnt.miner.worker.go","worker.commitNewWork"," call commit to create an empty block.")
 		w.commit(uncles, nil, false, tstart)
 	}
 
@@ -987,13 +973,17 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs)
+		log.Debug("binhnt.miner.worker.go","worker.commitNewWork"," commit local transactions")
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			log.Debug("binhnt.miner.worker.go","worker.commitNewWork"," commit local transactions and stop.")
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs)
+		log.Debug("binhnt.miner.worker.go","worker.commitNewWork"," commit remote transactions")
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			log.Debug("binhnt.miner.worker.go","worker.commitNewWork"," commit remote transactions and stop.")
 			return
 		}
 	}
@@ -1020,6 +1010,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		if interval != nil {
 			interval()
 		}
+		log.Debug("binhnt.miner.worker.go","worker.commit"," create new task.")
 		select {
 				case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
 						log.Debug("binhnt.miner.worker.go","worker.commit"," process after send to engine.")

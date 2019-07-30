@@ -1,25 +1,9 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package eth
 
 import (
 	"context"
 	"math/big"
-	"fmt"
+	// "fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -34,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+		"github.com/ethereum/go-ethereum/log"
 )
 
 // EthAPIBackend implements ethapi.Backend for full nodes
@@ -44,26 +29,26 @@ type EthAPIBackend struct {
 
 // ChainConfig returns the active chain configuration.
 func (b *EthAPIBackend) ChainConfig() *params.ChainConfig {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.ChainConfig"," get chain config")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.ChainConfig"," get chain config")
 
 	return b.eth.chainConfig
 }
 
 func (b *EthAPIBackend) CurrentBlock() *types.Block {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.CurrentBlock"," get current block")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.CurrentBlock"," get current block")
 
 	return b.eth.blockchain.CurrentBlock()
 }
 
 func (b *EthAPIBackend) SetHead(number uint64) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SetHead"," set head with number: ",number)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SetHead"," set head with number: ",number)
 
 	b.eth.protocolManager.downloader.Cancel()
 	b.eth.blockchain.SetHead(number)
 }
 
 func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Header, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.HeaderByNumber"," set head with blockNr: ",blockNr)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.HeaderByNumber"," set head with blockNr: ",blockNr)
 
 	// Pending block is only known by the miner
 	if blockNr == rpc.PendingBlockNumber {
@@ -78,12 +63,12 @@ func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, blockNr rpc.BlockNum
 }
 
 func (b *EthAPIBackend) HeaderByHash(ctx context.Context, hash common.Hash) (*types.Header, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.HeaderByHash"," set head with hash: ",hash)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.HeaderByHash"," set head with hash: ",hash)
 	return b.eth.blockchain.GetHeaderByHash(hash), nil
 }
 
 func (b *EthAPIBackend) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*types.Block, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.BlockByNumber"," set block with blockNr : ",blockNr)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.BlockByNumber"," set block with blockNr : ",blockNr)
 
 	// Pending block is only known by the miner
 	if blockNr == rpc.PendingBlockNumber {
@@ -98,7 +83,7 @@ func (b *EthAPIBackend) BlockByNumber(ctx context.Context, blockNr rpc.BlockNumb
 }
 
 func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.StateAndHeaderByNumber"," set block with blockNr : ",blockNr)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.StateAndHeaderByNumber"," set block with blockNr : ",blockNr)
 
 	// Pending state is only known by the miner
 	if blockNr == rpc.PendingBlockNumber {
@@ -115,23 +100,23 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, blockNr rpc.
 }
 
 func (b *EthAPIBackend) GetBlock(ctx context.Context, hash common.Hash) (*types.Block, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetBlock"," get block")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetBlock"," get block")
 
 	return b.eth.blockchain.GetBlockByHash(hash), nil
 }
 
 func (b *EthAPIBackend) GetReceipts(ctx context.Context, hash common.Hash) (types.Receipts, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetReceipts"," get GetReceipts")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetReceipts"," get GetReceipts")
 
 	return b.eth.blockchain.GetReceiptsByHash(hash), nil
 }
 
 func (b *EthAPIBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*types.Log, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetLogs"," get GetLogs: ", hash)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetLogs"," get GetLogs: ", hash)
 
 	receipts := b.eth.blockchain.GetReceiptsByHash(hash)
 	if receipts == nil {
-		fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetLogs"," receipts is nil ")
+		log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetLogs"," receipts is nil ")
 		return nil, nil
 	}
 	logs := make([][]*types.Log, len(receipts))
@@ -142,13 +127,13 @@ func (b *EthAPIBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*typ
 }
 
 func (b *EthAPIBackend) GetTd(blockHash common.Hash) *big.Int {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetTd"," get GetTd")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetTd"," get GetTd")
 
 	return b.eth.blockchain.GetTdByHash(blockHash)
 }
 
 func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header) (*vm.EVM, func() error, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetEVM"," get GetEVM")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetEVM"," get GetEVM")
 
 	state.SetBalance(msg.From(), math.MaxBig256)
 	vmError := func() error { return nil }
@@ -158,37 +143,37 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 }
 
 func (b *EthAPIBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SubscribeRemovedLogsEvent"," get SubscribeRemovedLogsEvent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SubscribeRemovedLogsEvent"," get SubscribeRemovedLogsEvent")
 	return b.eth.BlockChain().SubscribeRemovedLogsEvent(ch)
 }
 
 func (b *EthAPIBackend) SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SubscribeChainEvent"," get SubscribeChainEvent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SubscribeChainEvent"," get SubscribeChainEvent")
 	return b.eth.BlockChain().SubscribeChainEvent(ch)
 }
 
 func (b *EthAPIBackend) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SubscribeChainHeadEvent"," get SubscribeChainHeadEvent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SubscribeChainHeadEvent"," get SubscribeChainHeadEvent")
 	return b.eth.BlockChain().SubscribeChainHeadEvent(ch)
 }
 
 func (b *EthAPIBackend) SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SubscribeChainSideEvent"," get SubscribeChainSideEvent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SubscribeChainSideEvent"," get SubscribeChainSideEvent")
 	return b.eth.BlockChain().SubscribeChainSideEvent(ch)
 }
 
 func (b *EthAPIBackend) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SubscribeLogsEvent"," get SubscribeLogsEvent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SubscribeLogsEvent"," get SubscribeLogsEvent")
 	return b.eth.BlockChain().SubscribeLogsEvent(ch)
 }
 
 func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SendTx"," call b.eth.txPool.AddLocal(signedTx)")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SendTx"," call b.eth.txPool.AddLocal(signedTx)")
 	return b.eth.txPool.AddLocal(signedTx)
 }
 
 func (b *EthAPIBackend) GetPoolTransactions() (types.Transactions, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetPoolTransactions"," get pool transactions")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetPoolTransactions"," get pool transactions")
 
 	pending, err := b.eth.txPool.Pending()
 	if err != nil {
@@ -202,78 +187,78 @@ func (b *EthAPIBackend) GetPoolTransactions() (types.Transactions, error) {
 }
 
 func (b *EthAPIBackend) GetPoolTransaction(hash common.Hash) *types.Transaction {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetPoolTransaction"," get pool transaction")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetPoolTransaction"," get pool transaction")
 
 	return b.eth.txPool.Get(hash)
 }
 
 func (b *EthAPIBackend) GetPoolNonce(ctx context.Context, addr common.Address) (uint64, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.GetPoolNonce"," get nonce of address = ",addr)
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.GetPoolNonce"," get nonce of address = ",addr)
 	return b.eth.txPool.State().GetNonce(addr), nil
 }
 
 func (b *EthAPIBackend) Stats() (pending int, queued int) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.Stats"," get stats")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.Stats"," get stats")
 
 	return b.eth.txPool.Stats()
 }
 
 func (b *EthAPIBackend) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.TxPoolContent"," get TxPoolContent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.TxPoolContent"," get TxPoolContent")
 	return b.eth.TxPool().Content()
 }
 
 func (b *EthAPIBackend) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SubscribeNewTxsEvent"," get SubscribeNewTxsEvent")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SubscribeNewTxsEvent"," get SubscribeNewTxsEvent")
 	return b.eth.TxPool().SubscribeNewTxsEvent(ch)
 }
 
 func (b *EthAPIBackend) Downloader() *downloader.Downloader {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.Downloader"," get Downloader")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.Downloader"," get Downloader")
 
 	return b.eth.Downloader()
 }
 
 func (b *EthAPIBackend) ProtocolVersion() int {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.ProtocolVersion"," get ProtocolVersion")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.ProtocolVersion"," get ProtocolVersion")
 
 	return b.eth.EthVersion()
 }
 
 func (b *EthAPIBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.SuggestPrice"," get SuggestPrice")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.SuggestPrice"," get SuggestPrice")
 
 	return b.gpo.SuggestPrice(ctx)
 }
 
 func (b *EthAPIBackend) ChainDb() ethdb.Database {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.ChainDb"," get ChainDb")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.ChainDb"," get ChainDb")
 
 	return b.eth.ChainDb()
 }
 
 func (b *EthAPIBackend) EventMux() *event.TypeMux {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.EventMux"," get EventMux")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.EventMux"," get EventMux")
 
 	return b.eth.EventMux()
 }
 
 func (b *EthAPIBackend) AccountManager() *accounts.Manager {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.AccountManager"," get AccountManager")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.AccountManager"," get AccountManager")
 
 
 	return b.eth.AccountManager()
 }
 
 func (b *EthAPIBackend) BloomStatus() (uint64, uint64) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.BloomStatus"," get BloomStatus")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.BloomStatus"," get BloomStatus")
 
 	sections, _, _ := b.eth.bloomIndexer.Sections()
 	return params.BloomBitsBlocks, sections
 }
 
 func (b *EthAPIBackend) ServiceFilter(ctx context.Context, session *bloombits.MatcherSession) {
-	fmt.Println("binhnt.eth.api_backend","EthAPIBackend.ServiceFilter"," get ServiceFilter")
+	log.Debug("binhnt.eth.api_backend","EthAPIBackend.ServiceFilter"," get ServiceFilter")
 
 	for i := 0; i < bloomFilterThreads; i++ {
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)

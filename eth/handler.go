@@ -1,19 +1,3 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package eth
 
 import (
@@ -385,49 +369,49 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 			// Advance to the next header of the query
 			switch {
-			case hashMode && query.Reverse:
-				// Hash based traversal towards the genesis block
-				ancestor := query.Skip + 1
-				if ancestor == 0 {
-					unknown = true
-				} else {
-					query.Origin.Hash, query.Origin.Number = pm.blockchain.GetAncestor(query.Origin.Hash, query.Origin.Number, ancestor, &maxNonCanonical)
-					unknown = (query.Origin.Hash == common.Hash{})
-				}
-			case hashMode && !query.Reverse:
-				// Hash based traversal towards the leaf block
-				var (
-					current = origin.Number.Uint64()
-					next    = current + query.Skip + 1
-				)
-				if next <= current {
-					infos, _ := json.MarshalIndent(p.Peer.Info(), "", "  ")
-					p.Log().Warn("GetBlockHeaders skip overflow attack", "current", current, "skip", query.Skip, "next", next, "attacker", infos)
-					unknown = true
-				} else {
-					if header := pm.blockchain.GetHeaderByNumber(next); header != nil {
-						nextHash := header.Hash()
-						expOldHash, _ := pm.blockchain.GetAncestor(nextHash, next, query.Skip+1, &maxNonCanonical)
-						if expOldHash == query.Origin.Hash {
-							query.Origin.Hash, query.Origin.Number = nextHash, next
+					case hashMode && query.Reverse:
+						// Hash based traversal towards the genesis block
+						ancestor := query.Skip + 1
+						if ancestor == 0 {
+							unknown = true
+						} else {
+							query.Origin.Hash, query.Origin.Number = pm.blockchain.GetAncestor(query.Origin.Hash, query.Origin.Number, ancestor, &maxNonCanonical)
+							unknown = (query.Origin.Hash == common.Hash{})
+						}
+					case hashMode && !query.Reverse:
+						// Hash based traversal towards the leaf block
+						var (
+							current = origin.Number.Uint64()
+							next    = current + query.Skip + 1
+						)
+						if next <= current {
+							infos, _ := json.MarshalIndent(p.Peer.Info(), "", "  ")
+							p.Log().Warn("GetBlockHeaders skip overflow attack", "current", current, "skip", query.Skip, "next", next, "attacker", infos)
+							unknown = true
+						} else {
+							if header := pm.blockchain.GetHeaderByNumber(next); header != nil {
+								nextHash := header.Hash()
+								expOldHash, _ := pm.blockchain.GetAncestor(nextHash, next, query.Skip+1, &maxNonCanonical)
+								if expOldHash == query.Origin.Hash {
+									query.Origin.Hash, query.Origin.Number = nextHash, next
+								} else {
+									unknown = true
+								}
+							} else {
+								unknown = true
+							}
+						}
+					case query.Reverse:
+						// Number based traversal towards the genesis block
+						if query.Origin.Number >= query.Skip+1 {
+							query.Origin.Number -= query.Skip + 1
 						} else {
 							unknown = true
 						}
-					} else {
-						unknown = true
-					}
-				}
-			case query.Reverse:
-				// Number based traversal towards the genesis block
-				if query.Origin.Number >= query.Skip+1 {
-					query.Origin.Number -= query.Skip + 1
-				} else {
-					unknown = true
-				}
 
-			case !query.Reverse:
-				// Number based traversal towards the leaf block
-				query.Origin.Number += query.Skip + 1
+					case !query.Reverse:
+						// Number based traversal towards the leaf block
+						query.Origin.Number += query.Skip + 1
 			}
 		}
 		return p.SendBlockHeaders(headers)

@@ -19,6 +19,7 @@ package core
 import (
 	"time"
 	"fmt"
+	  "strconv"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -108,7 +109,7 @@ func (it *insertIterator) next() (*types.Block, error) {
 		return nil, nil
 	}
 	it.index++
-	log.Debug("binhnt.core.blockchain_insert","insertIterator.next()","insertIterator index = " , it.index)
+	log.Debug("binhnt.core.blockchain_insert","insertIterator.next()","insertIterator index = " + strconv.Itoa(it.index))
 
 	if err := <-it.results; err != nil {
 		log.Debug("binhnt.core.blockchain_insert","insertIterator.next()"," eror in it.results")

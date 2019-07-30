@@ -1,19 +1,3 @@
-// Copyright 2014 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package core
 
 import (
@@ -637,6 +621,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 // whitelisted, preventing any associated transaction from being dropped out of
 // the pool due to pricing constraints.
 func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
+	log.Trace("binhnt.core.tx_pool", "TxPool.add", "start add transaction to pool")
 	// If the transaction is already known, discard it
 	hash := tx.Hash()
 	if pool.all.Get(hash) != nil {
@@ -680,6 +665,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 			pool.priced.Removed()
 			pendingReplaceCounter.Inc(1)
 		}
+
 		pool.all.Add(tx)
 		pool.priced.Put(tx)
 		pool.journalTx(from, tx)
@@ -692,6 +678,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 		return old != nil, nil
 	}
 	// New transaction isn't replacing a pending one, push into queue
+	log.Trace("binhnt.core.tx_pool", "TxPool.add", "call enqueueTx")
 	replace, err := pool.enqueueTx(hash, tx)
 	if err != nil {
 		return false, err
@@ -713,6 +700,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (bool, error) {
 //
 // Note, this method assumes the pool lock is held!
 func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, error) {
+	log.Debug("binhnt.core.tx_pool","TxPool.enqueueTx","enqueueTx start")
+
 	// Try to insert the transaction into the future queue
 	from, _ := types.Sender(pool.signer, tx) // already validated
 	if pool.queue[from] == nil {
@@ -720,17 +709,22 @@ func (pool *TxPool) enqueueTx(hash common.Hash, tx *types.Transaction) (bool, er
 	}
 	inserted, old := pool.queue[from].Add(tx, pool.config.PriceBump)
 	if !inserted {
+		log.Debug("binhnt.core.tx_pool","TxPool.enqueueTx"," An older transaction was better, discard this")
 		// An older transaction was better, discard this
 		queuedDiscardCounter.Inc(1)
 		return false, ErrReplaceUnderpriced
 	}
+
 	// Discard any previous transaction and mark this
 	if old != nil {
+		log.Debug("binhnt.core.tx_pool","TxPool.enqueueTx"," Discard any previous transaction and mark this")
 		pool.all.Remove(old.Hash())
 		pool.priced.Removed()
 		queuedReplaceCounter.Inc(1)
 	}
+
 	if pool.all.Get(hash) == nil {
+		log.Debug("binhnt.core.tx_pool","TxPool.enqueueTx"," Add transaction to pool.all and pool.priced")
 		pool.all.Add(tx)
 		pool.priced.Put(tx)
 	}
@@ -792,7 +786,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 // the sender as a local one in the mean time, ensuring it goes around the local
 // pricing constraints.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
-	fmt.Println("binhnt.core.tx_pool","TxPool.AddLocal","add transaction to local pool")
+	log.Debug("binhnt.core.tx_pool","TxPool.AddLocal","add transaction to local pool")
 	return pool.addTx(tx, !pool.config.NoLocals)
 }
 
@@ -819,20 +813,21 @@ func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
 
 // addTx enqueues a single transaction into the pool if it is valid.
 func (pool *TxPool) addTx(tx *types.Transaction, local bool) error {
-	fmt.Println("binhnt.core.tx_pool","TxPool.addTx","lock pool.mu and add data  ")
+	log.Debug("binhnt.core.tx_pool","TxPool.addTx","lock pool.mu and add data  ")
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
 	// Try to inject the transaction and update any state
+	log.Debug("binhnt.core.tx_pool","TxPool.addTx","Try to inject the transaction and update any state  ")
 	replace, err := pool.add(tx, local)
 	if err != nil {
 		return err
 	}
 	// If we added a new transaction, run promotion checks and return
 	if !replace {
-		fmt.Println("binhnt.core.tx_pool","TxPool.addTx","new transaction. run promotion checks by call types.Sender  ")
+		log.Debug("binhnt.core.tx_pool","TxPool.addTx","new transaction. run promotion checks by call types.Sender  ")
 		from, _ := types.Sender(pool.signer, tx) // already validated
-		fmt.Println("binhnt.core.tx_pool","TxPool.addTx","call promoteExecutables ")
+		log.Debug("binhnt.core.tx_pool","TxPool.addTx","call promoteExecutables ")
 		pool.promoteExecutables([]common.Address{from})
 	}
 	return nil
@@ -944,7 +939,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 // future queue to the set of pending transactions. During this process, all
 // invalidated transactions (low nonce, low balance) are deleted.
 func (pool *TxPool) promoteExecutables(accounts []common.Address) {
-	fmt.Println("binhnt.core.tx_pool","TxPool.promoteExecutables"," check accounts =  ",accounts)
+	log.Debug("binhnt.core.tx_pool","TxPool.promoteExecutables"," check accounts =  ",accounts)
 	// Track the promoted transactions to broadcast them at once
 	var promoted []*types.Transaction
 
@@ -985,6 +980,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 				promoted = append(promoted, tx)
 			}
 		}
+
 		// Drop all transactions over the allowed limit
 		if !pool.locals.contains(addr) {
 			for _, tx := range list.Cap(int(pool.config.AccountQueue)) {
@@ -1004,11 +1000,13 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 	if len(promoted) > 0 {
 		go pool.txFeed.Send(NewTxsEvent{promoted})
 	}
+
 	// If the pending limit is overflown, start equalizing allowances
 	pending := uint64(0)
 	for _, list := range pool.pending {
 		pending += uint64(list.Len())
 	}
+
 	if pending > pool.config.GlobalSlots {
 		pendingBeforeCap := pending
 		// Assemble a spam order to penalize large transactors first
@@ -1075,11 +1073,13 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) {
 		}
 		pendingRateLimitCounter.Inc(int64(pendingBeforeCap - pending))
 	}
+
 	// If we've queued more transactions than the hard limit, drop oldest ones
 	queued := uint64(0)
 	for _, list := range pool.queue {
 		queued += uint64(list.Len())
 	}
+
 	if queued > pool.config.GlobalQueue {
 		// Sort all accounts with queued transactions by heartbeat
 		addresses := make(addressesByHeartbeat, 0, len(pool.queue))

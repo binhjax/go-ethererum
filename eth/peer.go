@@ -1,19 +1,3 @@
-// Copyright 2015 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package eth
 
 import (
@@ -115,26 +99,26 @@ func (p *peer) broadcast() {
 	fmt.Println("binhnt.eth.peer","peer.broadcast","send broadcast new block")
 	for {
 		select {
-		case txs := <-p.queuedTxs:
-			if err := p.SendTransactions(txs); err != nil {
-				return
-			}
-			p.Log().Trace("Broadcast transactions", "count", len(txs))
+				case txs := <-p.queuedTxs:
+					if err := p.SendTransactions(txs); err != nil {
+						return
+					}
+					p.Log().Trace("Broadcast transactions", "count", len(txs))
 
-		case prop := <-p.queuedProps:
-			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
-				return
-			}
-			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
+				case prop := <-p.queuedProps:
+					if err := p.SendNewBlock(prop.block, prop.td); err != nil {
+						return
+					}
+					p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
-		case block := <-p.queuedAnns:
-			if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {
-				return
-			}
-			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
+				case block := <-p.queuedAnns:
+					if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {
+						return
+					}
+					p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
 
-		case <-p.term:
-			return
+				case <-p.term:
+					return
 		}
 	}
 }
@@ -235,10 +219,10 @@ func (p *peer) SendNewBlockHashes(hashes []common.Hash, numbers []uint64) error 
 // dropped.
 func (p *peer) AsyncSendNewBlockHash(block *types.Block) {
 	select {
-	case p.queuedAnns <- block:
-		p.knownBlocks.Add(block.Hash())
-	default:
-		p.Log().Debug("Dropping block announcement", "number", block.NumberU64(), "hash", block.Hash())
+		case p.queuedAnns <- block:
+			p.knownBlocks.Add(block.Hash())
+		default:
+			p.Log().Debug("Dropping block announcement", "number", block.NumberU64(), "hash", block.Hash())
 	}
 }
 
@@ -252,11 +236,11 @@ func (p *peer) SendNewBlock(block *types.Block, td *big.Int) error {
 // the peer's broadcast queue is full, the event is silently dropped.
 func (p *peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 	select {
-	case p.queuedProps <- &propEvent{block: block, td: td}:
-		p.knownBlocks.Add(block.Hash())
-	default:
-		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
-	}
+		case p.queuedProps <- &propEvent{block: block, td: td}:
+			p.knownBlocks.Add(block.Hash())
+		default:
+			p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+		}
 }
 
 // SendBlockHeaders sends a batch of block headers to the remote peer.

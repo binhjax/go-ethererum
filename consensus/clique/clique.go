@@ -1,20 +1,3 @@
-// Copyright 2017 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
-// Package clique implements the proof-of-authority consensus engine.
 package clique
 
 import (
@@ -24,6 +7,7 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+	  "strconv"
 	// "fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -249,7 +233,7 @@ func (c *Clique) Author(header *types.Header) (common.Address, error) {
 
 // VerifyHeader checks whether a header conforms to the consensus rules.
 func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header, seal bool) error {
-	log.Debug("binhnt.consensus.clique.clique","Clique.VerifyHeader"," start VerifyHeader")
+	log.Debug("binhnt.consensus.clique.clique","Clique.VerifyHeader"," start VerifyHeader, return error ")
 
 	return c.verifyHeader(chain, header, nil)
 }
@@ -258,19 +242,20 @@ func (c *Clique) VerifyHeader(chain consensus.ChainReader, header *types.Header,
 // method returns a quit channel to abort the operations and a results channel to
 // retrieve the async verifications (the order is that of the input slice).
 func (c *Clique) VerifyHeaders(chain consensus.ChainReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
-	log.Debug("binhnt.consensus.clique.clique","Clique.VerifyHeaders"," start VerifyHeaders")
+	log.Debug("binhnt.consensus.clique.clique","Clique.VerifyHeaders"," start VerifyHeaders return ( struct, error) ")
 
 	abort := make(chan struct{})
 	results := make(chan error, len(headers))
 
 	go func() {
 		for i, header := range headers {
+			log.Debug("binhnt.consensus.clique.clique","Clique.VerifyHeaders"," start check header:  " + strconv.Itoa(i)  +  " call verifyHeader")
 			err := c.verifyHeader(chain, header, headers[:i])
-
+			log.Debug("binhnt.consensus.clique.clique","Clique.VerifyHeaders"," check return")
 			select {
-			case <-abort:
-				return
-			case results <- err:
+					case <-abort:
+						return
+					case results <- err:
 			}
 		}
 	}()
@@ -282,7 +267,7 @@ func (c *Clique) VerifyHeaders(chain consensus.ChainReader, headers []*types.Hea
 // looking those up from the database. This is useful for concurrently verifying
 // a batch of new headers.
 func (c *Clique) verifyHeader(chain consensus.ChainReader, header *types.Header, parents []*types.Header) error {
-	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader"," start verifyHeader")
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader"," start verifyHeader with chain, header, and parents ")
 
 	if header.Number == nil {
 		return errUnknownBlock
@@ -290,10 +275,12 @@ func (c *Clique) verifyHeader(chain consensus.ChainReader, header *types.Header,
 	number := header.Number.Uint64()
 
 	// Don't waste time checking blocks from the future
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader"," Don't waste time checking blocks from the future")
 	if header.Time.Cmp(big.NewInt(time.Now().Unix())) > 0 {
 		return consensus.ErrFutureBlock
 	}
 	// Checkpoint blocks need to enforce zero beneficiary
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader"," Checkpoint blocks need to enforce zero beneficiary")
 	checkpoint := (number % c.config.Epoch) == 0
 	if checkpoint && header.Coinbase != (common.Address{}) {
 		return errInvalidCheckpointBeneficiary
@@ -328,16 +315,21 @@ func (c *Clique) verifyHeader(chain consensus.ChainReader, header *types.Header,
 	if header.UncleHash != uncleHash {
 		return errInvalidUncleHash
 	}
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader"," Ensure that the block's difficulty is meaningful (may not be correct at this point)")
 	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
 	if number > 0 {
 		if header.Difficulty == nil || (header.Difficulty.Cmp(diffInTurn) != 0 && header.Difficulty.Cmp(diffNoTurn) != 0) {
 			return errInvalidDifficulty
 		}
 	}
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader","If all checks passed, validate any special fields for hard forks")
+
 	// If all checks passed, validate any special fields for hard forks
 	if err := misc.VerifyForkHashes(chain.Config(), header, false); err != nil {
 		return err
 	}
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyHeader","All basic checks passed, verify cascading fieldss")
+
 	// All basic checks passed, verify cascading fields
 	return c.verifyCascadingFields(chain, header, parents)
 }
@@ -354,6 +346,8 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *type
 	if number == 0 {
 		return nil
 	}
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyCascadingFields","  Ensure that the block's timestamp isn't too close to it's parent")
+
 	// Ensure that the block's timestamp isn't too close to it's parent
 	var parent *types.Header
 	if len(parents) > 0 {
@@ -367,12 +361,16 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *type
 	if parent.Time.Uint64()+c.config.Period > header.Time.Uint64() {
 		return ErrInvalidTimestamp
 	}
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyCascadingFields"," Retrieve the snapshot needed to verify this header and cache it")
+
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
 		return err
 	}
 	// If the block is a checkpoint block, verify the signer list
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyCascadingFields"," If the block is a checkpoint block, verify the signer list")
+
 	if number%c.config.Epoch == 0 {
 		signers := make([]byte, len(snap.Signers)*common.AddressLength)
 		for i, signer := range snap.signers() {
@@ -383,7 +381,9 @@ func (c *Clique) verifyCascadingFields(chain consensus.ChainReader, header *type
 			return errMismatchingCheckpointSigners
 		}
 	}
+
 	// All basic checks passed, verify the seal and return
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifyCascadingFields"," All basic checks passed, verify the seal and return")
 	return c.verifySeal(chain, header, parents)
 }
 
@@ -494,17 +494,20 @@ func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, p
 	log.Debug("binhnt.consensus.clique.clique","Clique.verifySeal"," start verifySeal")
 
 	// Verifying the genesis block is not supported
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifySeal"," Verifying the genesis block is not supported")
 	number := header.Number.Uint64()
 	if number == 0 {
 		return errUnknownBlock
 	}
 	// Retrieve the snapshot needed to verify this header and cache it
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifySeal"," Retrieve the snapshot needed to verify this header and cache it")
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
 		return err
 	}
 
 	// Resolve the authorization key and check against signers
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifySeal"," Resolve the authorization key and check against signers")
 	signer, err := ecrecover(header, c.signatures)
 	if err != nil {
 		return err
@@ -512,15 +515,18 @@ func (c *Clique) verifySeal(chain consensus.ChainReader, header *types.Header, p
 	if _, ok := snap.Signers[signer]; !ok {
 		return errUnauthorizedSigner
 	}
+
 	for seen, recent := range snap.Recents {
 		if recent == signer {
 			// Signer is among recents, only fail if the current block doesn't shift it out
+			log.Debug("binhnt.consensus.clique.clique","Clique.verifySeal"," Signer is among recents, only fail if the current block doesn't shift it out")
 			if limit := uint64(len(snap.Signers)/2 + 1); seen > number-limit {
 				return errRecentlySigned
 			}
 		}
 	}
 	// Ensure that the difficulty corresponds to the turn-ness of the signer
+	log.Debug("binhnt.consensus.clique.clique","Clique.verifySeal","Ensure that the difficulty corresponds to the turn-ness of the signer")
 	if !c.fakeDiff {
 		inturn := snap.inturn(header.Number.Uint64(), signer)
 		if inturn && header.Difficulty.Cmp(diffInTurn) != 0 {
@@ -684,11 +690,10 @@ func (c *Clique) Seal(chain consensus.ChainReader, block *types.Block, results c
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
 	go func() {
 		select {
-		case <-stop:
-			return
-		case <-time.After(delay):
+			case <-stop:
+				return
+			case <-time.After(delay):
 		}
-
 		select {
 				case results <- block.WithSeal(header):
 				default:
